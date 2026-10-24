@@ -43,3 +43,18 @@ class ClientTests(unittest.TestCase):
         self.assertIn('"ok": true', out)
         self.assertEqual(err, "")
         request.assert_called_once_with("/items", "POST", {"name": "Build", "progress": 40, "etaSeconds": 90})
+
+    def testProjectAndT3IconArePassedThrough(self):
+        code, _, err, request = self.invoke(["Build", "40", "90", "--project", "nix-darwin",
+                                            "--project-icon", '{"kind":"lucide","name":"snowflake","color":"blue"}'],
+                                           result={"ok": True})
+        self.assertEqual((code, err), (0, ""))
+        request.assert_called_once_with("/items", "POST", {"name": "Build", "progress": 40, "etaSeconds": 90,
+                                                          "project": "nix-darwin", "projectIcon": {
+                                                              "kind": "lucide", "name": "snowflake", "color": "blue"}})
+
+    def testInvalidIconJSONIsRejectedBeforeSending(self):
+        for icon in ["not json", "[]", '"🎹"', '{"kind":"unknown"}']:
+            with self.assertRaises(SystemExit) as error:
+                self.invoke(["Build", "40", "90", "--project-icon", icon])
+            self.assertEqual(error.exception.code, 2)

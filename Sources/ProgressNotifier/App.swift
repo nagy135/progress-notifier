@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var keyboardMonitor: Any?
     private var windowHidden = false
     private var compact = UserDefaults.standard.bool(forKey: "compactMode")
+    private var expandedContentHeight: CGFloat?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let appMenu = NSMenu()
@@ -120,11 +121,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let wasVisible = panel.isVisible
         let hosting = panel.contentView as? NSHostingView<ProgressCard>
         let root = ProgressCard(model: model, maximumHeight: maximumHeight, compact: compact,
+                                expandedContentHeight: expandedContentHeight,
+                                contentHeightChanged: { [weak self] height in
+                                    guard let self, abs((self.expandedContentHeight ?? 0) - height) > 0.5 else { return }
+                                    self.expandedContentHeight = height
+                                    self.refreshPanel()
+                                },
                                 toggleCompact: { [weak self] in self?.toggleCompact() },
                                 close: { [weak self] in self?.hideProgress() })
         if let hosting { hosting.rootView = root }
-        else { panel.contentView = NSHostingView(rootView: root) }
-        let height = compact ? 56 : model.items.isEmpty ? 210 : min(CGFloat(model.items.count) * 124 + 82, maximumHeight)
+        else {
+            let hosting = NSHostingView(rootView: root)
+            hosting.sizingOptions = []
+            panel.contentView = hosting
+        }
+        let height = compact ? ProgressCard.compactHeight(itemCount: model.items.count, maximumHeight: maximumHeight)
+            : model.items.isEmpty ? 100 + ProgressCard.expandedChromeHeight
+            : min((expandedContentHeight ?? CGFloat(model.items.count) * 100 + 8) + ProgressCard.expandedChromeHeight, maximumHeight)
         var frame = panel.frame
         let rightEdge = frame.maxX
         frame.origin.y += frame.height - height

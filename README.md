@@ -13,7 +13,7 @@ cd ~/Code/progress-notifier
 open 'build/Progress Notifier.app'
 ```
 
-Opening the app shows a floating panel and a menu bar icon. With no items it says “No progress”. Drag its background to move it. Large stacks scroll. Click anywhere except an X, or press M, to toggle between the full list and a tiny task counter. Q, ⌘W, or the window's X hides the window while updates continue in the background. Updates keep it hidden until you open the app again or choose Show Progress from the menu bar. ⌘Q or the menu bar's Quit stops the app. Move the bundle to `/Applications` if desired. It is locally ad-hoc signed, not notarized.
+Opening the app shows a floating panel and a menu bar icon. With no items it says “No progress”. Drag its background to move it. Large stacks scroll. Click anywhere except an X, or press M, to toggle between the full list and a compact task counter with a minimal progress bar for each item, without titles. Q, ⌘W, or the window's X hides the window while updates continue in the background. Updates keep it hidden until you open the app again or choose Show Progress from the menu bar. ⌘Q or the menu bar's Quit stops the app. Move the bundle to `/Applications` if desired. It is locally ad-hoc signed, not notarized.
 
 ## Send progress
 
@@ -24,6 +24,16 @@ Using the included Python 3 client while the app is running:
 ./scripts/progress-notify 'Build release' 45 90
 ./scripts/progress-notify 'Build release' 100 0
 ```
+
+Supply a project name to show its icon and a small project heading above the task title:
+
+```sh
+./scripts/progress-notify 'Build release' 45 90 --project 'progress-notifier'
+./scripts/progress-notify 'Build release' 60 45 --project 'nix-darwin' \
+  --project-icon '{"kind":"lucide","name":"snowflake","color":"blue"}'
+```
+
+`projectIcon` accepts the same object returned by T3's `t3_project_read`: `{"kind":"emoji","emoji":"🎹"}`, `{"kind":"lucide","name":"snowflake","color":"blue"}`, or `{"kind":"monogram","text":"PN","color":"violet"}`. When T3 returns no override, omit the icon: the app generates the same monogram and color from the project name. Lucide SVGs are bundled for offline rendering; their [ISC license](Sources/ProgressNotifier/Resources/Lucide-LICENSE.txt) is included. Refresh them with `python3 scripts/vendor-lucide.py`.
 
 Or use any HTTP client:
 
@@ -41,7 +51,9 @@ The three fields are required:
 | `progress` | A number from 0 to 100, including fractions. |
 | `etaSeconds` | Estimated seconds **remaining now**, from 0 to 31536000. Each update replaces the estimate. |
 
-The ETA counts down independently of progress. Expired estimates say “Finishing soon”; only a client can mark an item complete. At 100%, an existing item flashes green, scales up, plays the macOS Glass sound, and disappears after 1.25 seconds. Reduce Motion disables the scale effect. Repeated completion requests do not play extra sounds. Unknown completions do not create cards.
+Optional fields are `project` (up to 160 characters) and `projectIcon` (a T3 icon object). Omitted or null metadata stays unchanged on an existing item. Send `project: ""` to clear both. Metadata is saved across relaunches and returned by `GET /items` when present. The item name remains its stable identity; a project heading does not rename it.
+
+The ETA counts down independently of progress. Expired estimates say “Finishing soon”; only a client can mark an item complete. Each accepted update briefly flashes and scales its card, including ETA-only and repeated progress values; compact bars flash individually. At 100%, an existing item flashes green, scales up, plays the macOS Glass sound, and disappears after 1.25 seconds. Reduce Motion disables the scale effect. Repeated completion requests do not replay the effect or sound. Unknown completions do not create cards.
 
 Click an item's X to dismiss it. Updates for that name stay silent until its client sends 100%; the name is then available for a new run. Dismissal does not cancel the client's actual work. When the last card disappears, the window stays visible with “No progress” (unless you hid it). Items and dismissals are saved to `~/Library/Application Support/Progress Notifier/state.json` and restored after relaunch. Completed items are never restored. Compact mode is also remembered.
 

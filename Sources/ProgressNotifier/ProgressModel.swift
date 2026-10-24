@@ -8,6 +8,9 @@ final class ProgressModel: ObservableObject {
     private let stateURL: URL
     var changed: (() -> Void)?
     private var sound: NSSound?
+    private var revisions: [UUID: UInt64] = [:]
+
+    func revision(for item: ProgressItem) -> UInt64 { revisions[item.id] ?? 0 }
 
     init() {
         stateURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -30,14 +33,19 @@ final class ProgressModel: ObservableObject {
         // Standard clients encode query spaces as +; an actual plus arrives as %2B.
         url.percentEncodedQuery = url.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%20")
         if url.path == "/health", request.method == "GET" {
-            return HTTPResponse(["app": "progress-notifier", "version": "1.1.0", "status": "ok"])
+            return HTTPResponse(["app": "progress-notifier", "version": "1.2.0", "status": "ok"])
         }
         guard url.path == "/items" else { return HTTPResponse(404, ["error": "Unknown endpoint"]) }
         switch request.method {
         case "GET":
             let data: [[String: Any]] = items.map {
-                ["name": $0.name, "progress": $0.progress,
-                 "etaSeconds": max(0, $0.expectedFinish.timeIntervalSinceNow), "completing": $0.completing]
+                var value: [String: Any] = ["name": $0.name, "progress": $0.progress,
+                    "etaSeconds": max(0, $0.expectedFinish.timeIntervalSinceNow), "completing": $0.completing]
+                if let project = $0.project { value["project"] = project }
+                if let icon = $0.projectIcon,
+                   let data = try? JSONEncoder().encode(icon),
+                   let object = try? JSONSerialization.jsonObject(with: data) { value["projectIcon"] = object }
+                return value
             }
             return HTTPResponse(["items": data])
         case "DELETE":
@@ -53,8 +61,13 @@ final class ProgressModel: ObservableObject {
             do {
                 let update: ProgressUpdate
                 do { update = try JSONDecoder().decode(ProgressUpdate.self, from: request.body) }
-                catch { throw APIError(400, "Expected JSON: name (string), progress (0–100), etaSeconds (seconds remaining)") }
+                catch { throw APIError(400, "Expected JSON: name (string), progress (0–100), etaSeconds (seconds remaining); optional project must be a string and projectIcon must be a T3 project icon object") }
+                let name = update.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                let wasCompleting = registry.items.first(where: { $0.name == name })?.completing ?? false
                 let completed = try registry.update(update)
+                if !wasCompleting, let item = registry.items.first(where: { $0.name == name }) {
+                    revisions[item.id, default: 0] &+= 1
+                }
                 publish()
                 if completed, let item = items.first(where: { $0.name == update.name.trimmingCharacters(in: .whitespacesAndNewlines) }) {
                     sound = NSSound(named: "Glass")
@@ -72,6 +85,8 @@ final class ProgressModel: ObservableObject {
     }
 
     private func publish() {
+        let ids = Set(registry.items.map(\.id))
+        revisions = revisions.filter { ids.contains($0.key) }
         withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) { items = registry.items }
         do {
             try FileManager.default.createDirectory(at: stateURL.deletingLastPathComponent(), withIntermediateDirectories: true)

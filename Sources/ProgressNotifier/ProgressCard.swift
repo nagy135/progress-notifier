@@ -23,23 +23,86 @@ private func remaining(_ seconds: TimeInterval) -> String {
     return "About \(value / 86400)d \((value % 86400) / 3600)h left"
 }
 
-private struct ItemCard: View {
+private struct ItemProgressBar: View {
     let item: ProgressItem
-    let now: Date
-    let dismiss: () -> Void
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var pulse = false
+
     private var tint: Color { item.completing ? .green : Color(red: 0.23, green: 0.72, blue: 0.64) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 10) {
-                Image(systemName: item.completing ? "checkmark" : "arrow.triangle.2.circlepath")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(tint)
-                    .frame(width: 28, height: 28)
-                    .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
-                VStack(alignment: .leading, spacing: 4) {
+        GeometryReader { proxy in
+            Capsule().fill(tint.opacity(0.13))
+                .overlay(alignment: .leading) {
+                    Capsule().fill(tint).frame(width: proxy.size.width * item.progress / 100)
+                }
+        }
+        .frame(height: 5)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(item.name)
+        .accessibilityValue(item.completing ? "Complete" : "\(Int(item.progress.rounded())) percent")
+    }
+}
+
+private struct UpdatePulse: ViewModifier {
+    let revision: UInt64
+    let tint: Color
+    let cornerRadius: CGFloat
+    var scale: CGFloat = 1.035
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var pulse = false
+    @State private var pulseGeneration: UInt64 = 0
+
+    func body(content: Content) -> some View {
+        content
+            .overlay(RoundedRectangle(cornerRadius: cornerRadius).fill(tint.opacity(pulse ? 0.18 : 0)))
+            .overlay(RoundedRectangle(cornerRadius: cornerRadius).strokeBorder(tint.opacity(pulse ? 0.6 : 0)))
+            .brightness(pulse ? 0.12 : 0)
+            .scaleEffect(pulse && !reduceMotion ? scale : 1)
+            .onAppear { if revision > 0 { flash() } }
+            .onChange(of: revision) { _ in flash() }
+    }
+
+    private func flash() {
+        pulseGeneration &+= 1
+        let generation = pulseGeneration
+        var reset = Transaction()
+        reset.disablesAnimations = true
+        withTransaction(reset) { pulse = false }
+        DispatchQueue.main.async {
+            guard pulseGeneration == generation else { return }
+            withAnimation(.easeOut(duration: 0.12)) { pulse = true }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+                guard pulseGeneration == generation else { return }
+                withAnimation(.easeInOut(duration: 0.3)) { pulse = false }
+            }
+        }
+    }
+}
+
+private struct ItemCard: View {
+    let item: ProgressItem
+    let revision: UInt64
+    let now: Date
+    let dismiss: () -> Void
+    private var tint: Color { item.completing ? .green : Color(red: 0.23, green: 0.72, blue: 0.64) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 8) {
+                if item.project == nil {
+                    Image(systemName: item.completing ? "checkmark" : "arrow.triangle.2.circlepath")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(tint)
+                        .frame(width: 24, height: 24)
+                        .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 7))
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    if let project = item.project {
+                        HStack(spacing: 5) {
+                            ProjectIconView(project: project, icon: item.projectIcon)
+                            Text(project).font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(.secondary).lineLimit(1).help(project)
+                        }
+                    }
                     Text(item.name).font(.system(size: 13, weight: .semibold))
                         .lineLimit(2).help(item.name)
                     Text(item.completing ? "Complete" : remaining(item.expectedFinish.timeIntervalSince(now)))
@@ -55,37 +118,28 @@ private struct ItemCard: View {
                 .accessibilityLabel("Dismiss \(item.name)")
                 .modifier(ExcludeFromToggle())
             }
-            HStack(spacing: 12) {
-                GeometryReader { proxy in
-                    Capsule().fill(tint.opacity(0.13))
-                        .overlay(alignment: .leading) {
-                            Capsule().fill(tint).frame(width: proxy.size.width * item.progress / 100)
-                        }
-                }.frame(height: 5)
+            HStack(spacing: 8) {
+                ItemProgressBar(item: item)
                 Text("\(item.progress, specifier: "%.0f")%")
-                    .font(.system(size: 14, weight: .semibold, design: .rounded))
-                    .monospacedDigit().foregroundStyle(tint).frame(width: 42, alignment: .trailing)
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .monospacedDigit().foregroundStyle(tint).frame(width: 38, alignment: .trailing)
             }
         }
-        .padding(14)
-        .background(.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).fill(Color.green.opacity(pulse ? 0.22 : 0)))
-        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(tint.opacity(pulse ? 0.6 : 0)))
-        .scaleEffect(pulse && !reduceMotion ? 1.035 : 1)
-        .onChange(of: item.completing) { complete in
-            guard complete else { return }
-            withAnimation(.easeOut(duration: 0.18)) { pulse = true }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                withAnimation(.easeInOut(duration: 0.4)) { pulse = false }
-            }
-        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 12))
+        .modifier(UpdatePulse(revision: revision, tint: tint, cornerRadius: 12))
     }
 }
 
 struct ProgressCard: View {
+    static let expandedChromeHeight: CGFloat = 72
+
     @ObservedObject var model: ProgressModel
     let maximumHeight: CGFloat
     let compact: Bool
+    let expandedContentHeight: CGFloat?
+    let contentHeightChanged: (CGFloat) -> Void
     let toggleCompact: () -> Void
     let close: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -94,14 +148,24 @@ struct ProgressCard: View {
 
     private var runningCount: Int { model.items.filter { !$0.completing }.count }
 
+    static func compactHeight(itemCount: Int, maximumHeight: CGFloat) -> CGFloat {
+        guard itemCount > 0 else { return 56 }
+        return min(64 + CGFloat(itemCount) * 11 - 6, maximumHeight)
+    }
+
+    private func reportContentHeight(_ height: CGFloat) {
+        guard height > 0 else { return }
+        DispatchQueue.main.async { contentHeightChanged(height) }
+    }
+
     private var controls: some View {
         HStack(spacing: compact ? 2 : 4) {
             Button(action: toggleCompact) {
                 Image(systemName: compact ? "arrow.up.left.and.arrow.down.right" : "minus")
                     .frame(width: compact ? 20 : 24, height: compact ? 20 : 24)
             }
-            .help(compact ? "Expand progress" : "Minimize to task count")
-            .accessibilityLabel(compact ? "Expand progress" : "Minimize to task count")
+            .help(compact ? "Expand progress" : "Minimize progress")
+            .accessibilityLabel(compact ? "Expand progress" : "Minimize progress")
             .modifier(ExcludeFromToggle())
             Button(action: close) {
                 Image(systemName: "xmark").frame(width: compact ? 20 : 24, height: compact ? 20 : 24)
@@ -116,7 +180,7 @@ struct ProgressCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 8) {
             if compact {
                 HStack(spacing: 6) {
                     Image(systemName: "chart.bar.fill").font(.system(size: 12)).foregroundStyle(.mint)
@@ -126,6 +190,20 @@ struct ProgressCard: View {
                     controls
                 }
                 .frame(height: 20)
+                if !model.items.isEmpty {
+                    ScrollView {
+                        VStack(spacing: 6) {
+                            ForEach(model.items) { item in
+                                ItemProgressBar(item: item)
+                                    .modifier(UpdatePulse(revision: model.revision(for: item),
+                                                          tint: item.completing ? .green : .mint,
+                                                          cornerRadius: 2.5, scale: 1))
+                            }
+                        }
+                    }
+                    .frame(height: Self.compactHeight(itemCount: model.items.count, maximumHeight: maximumHeight) - 64)
+                    .scrollIndicators(.hidden)
+                }
             } else {
             HStack {
                 Text("Progress").font(.system(size: 17, weight: .semibold))
@@ -147,20 +225,26 @@ struct ProgressCard: View {
             } else {
             ScrollView {
                 TimelineView(.periodic(from: .now, by: 1)) { context in
-                    VStack(spacing: 10) {
+                    VStack(spacing: 6) {
                         ForEach(model.items) { item in
-                            ItemCard(item: item, now: context.date) { model.dismiss(item.name) }
+                            ItemCard(item: item, revision: model.revision(for: item), now: context.date) { model.dismiss(item.name) }
                                 .transition(.opacity.combined(with: .move(edge: .trailing)))
                         }
-                    }.padding(6)
+                    }.padding(4)
                 }
+                .background(GeometryReader { proxy in
+                    Color.clear
+                        .onAppear { reportContentHeight(proxy.size.height) }
+                        .onChange(of: proxy.size.height) { reportContentHeight($0) }
+                })
             }
-            .frame(height: min(CGFloat(model.items.count) * 124 + 2, maximumHeight - 82))
+            .frame(height: min(expandedContentHeight ?? CGFloat(model.items.count) * 100 + 8,
+                               maximumHeight - Self.expandedChromeHeight))
             .scrollIndicators(.hidden)
             }
             }
         }
-        .padding(compact ? 10 : 14)
+        .padding(10)
         .frame(width: compact ? 200 : 350)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
         .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(.primary.opacity(0.08)))

@@ -2,6 +2,58 @@ import XCTest
 @testable import ProgressCore
 
 final class ProgressCoreTests: XCTestCase {
+    func testProjectMetadataSurvivesUpdatesAndSnapshot() throws {
+        let registry = ProgressRegistry()
+        let icon = ProjectIcon(kind: .lucide, name: "snowflake", color: "blue")
+        try registry.update(.init(name: "Build", progress: 10, etaSeconds: 60, project: " nix-darwin ", projectIcon: icon))
+        let id = registry.items[0].id
+        try registry.update(.init(name: "Build", progress: 20, etaSeconds: 30))
+        XCTAssertEqual(registry.items[0].project, "nix-darwin")
+        XCTAssertEqual(registry.items[0].projectIcon, icon)
+        let data = try JSONEncoder().encode(registry.snapshot)
+        let restored = ProgressRegistry(snapshot: try JSONDecoder().decode(ProgressSnapshot.self, from: data))
+        XCTAssertEqual(restored.items[0].id, id)
+        XCTAssertEqual(restored.items[0].projectIcon, icon)
+        try restored.update(.init(name: "Build", progress: 30, etaSeconds: 20, project: ""))
+        XCTAssertNil(restored.items[0].project)
+        XCTAssertNil(restored.items[0].projectIcon)
+    }
+
+    func testLegacyJSONAndSnapshotsRemainCompatible() throws {
+        let update = try JSONDecoder().decode(ProgressUpdate.self, from: Data(#"{"name":"Build","progress":10,"etaSeconds":30}"#.utf8))
+        XCTAssertNil(update.project)
+        XCTAssertNil(update.projectIcon)
+        let snapshot = #"{"items":[{"id":"0A201158-069C-4E7B-A850-D7D2AC46F548","name":"Build","progress":10,"expectedFinish":1000,"completing":false}],"dismissed":[]}"#
+        let registry = ProgressRegistry(snapshot: try JSONDecoder().decode(ProgressSnapshot.self, from: Data(snapshot.utf8)))
+        XCTAssertEqual(registry.items.count, 1)
+        XCTAssertNil(registry.items[0].project)
+    }
+
+    func testT3IconsAndDefaultMonograms() throws {
+        for icon in [ProjectIcon(kind: .emoji, emoji: "🎹"),
+                     .init(kind: .monogram, color: "violet", text: "PN"),
+                     .init(kind: .lucide, name: "message-square-dashed", color: "gray")] {
+            XCTAssertEqual(try icon.validated(), icon)
+        }
+        XCTAssertEqual(ProjectIcon.defaultIcon(for: "progress-notifier").text, "PN")
+        XCTAssertEqual(ProjectIcon.defaultIcon(for: "t3-code").text, "T3")
+        XCTAssertEqual(ProjectIcon.defaultIcon(for: "API").text, "AI")
+        XCTAssertEqual(ProjectIcon.defaultIcon(for: "!!!").text, "PR")
+        XCTAssertEqual(ProjectIcon.defaultIcon(for: " Progress-Notifier "), ProjectIcon.defaultIcon(for: "progress-notifier"))
+    }
+
+    func testInvalidMetadataIsRejectedWithoutMutation() throws {
+        let registry = ProgressRegistry()
+        for value in [ProgressUpdate(name: "Build", progress: 10, etaSeconds: 30, project: "a\nb"),
+                      .init(name: "Build", progress: 10, etaSeconds: 30, project: String(repeating: "a", count: 161)),
+                      .init(name: "Build", progress: 10, etaSeconds: 30, projectIcon: .init(kind: .lucide, name: "../file", color: "blue")),
+                      .init(name: "Build", progress: 10, etaSeconds: 30, projectIcon: .init(kind: .monogram, color: "invalid", text: "PN")),
+                      .init(name: "Build", progress: 10, etaSeconds: 30, projectIcon: .init(kind: .emoji, emoji: ""))] {
+            XCTAssertThrowsError(try registry.update(value))
+        }
+        XCTAssertTrue(registry.items.isEmpty)
+    }
+
     func testSnapshotRestoresIdentityEstimateAndDismissals() throws {
         let registry = ProgressRegistry()
         let now = Date(timeIntervalSince1970: 1000)

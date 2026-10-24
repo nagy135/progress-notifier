@@ -4,11 +4,15 @@ public struct ProgressUpdate: Codable {
     public let name: String
     public let progress: Double
     public let etaSeconds: Double
+    public let project: String?
+    public let projectIcon: ProjectIcon?
 
-    public init(name: String, progress: Double, etaSeconds: Double) {
+    public init(name: String, progress: Double, etaSeconds: Double, project: String? = nil, projectIcon: ProjectIcon? = nil) {
         self.name = name
         self.progress = progress
         self.etaSeconds = etaSeconds
+        self.project = project
+        self.projectIcon = projectIcon
     }
 
     public func validated() throws -> ProgressUpdate {
@@ -23,7 +27,19 @@ public struct ProgressUpdate: Codable {
         guard etaSeconds.isFinite, (0...31_536_000).contains(etaSeconds) else {
             throw APIError(400, "etaSeconds must be seconds remaining, from 0 to 31536000")
         }
-        return ProgressUpdate(name: name, progress: progress, etaSeconds: etaSeconds)
+        return ProgressUpdate(name: name, progress: progress, etaSeconds: etaSeconds,
+                              project: try Self.metadata(project, field: "project", limit: 160),
+                              projectIcon: try projectIcon?.validated())
+    }
+
+    private static func metadata(_ input: String?, field: String, limit: Int) throws -> String? {
+        guard let input else { return nil }
+        let value = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard value.count <= limit,
+              !value.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) else {
+            throw APIError(400, "\(field) must contain at most \(limit) characters without control characters")
+        }
+        return value
     }
 }
 
@@ -33,6 +49,8 @@ public struct ProgressItem: Codable, Identifiable {
     public var progress: Double
     public var expectedFinish: Date
     public var completing: Bool
+    public var project: String?
+    public var projectIcon: ProjectIcon?
 }
 
 public struct APIError: Error {
@@ -55,9 +73,13 @@ public final class ProgressRegistry {
         var names = Set<String>()
         for item in snapshot.items where !item.completing && item.progress < 100 {
             guard items.count < 50, item.expectedFinish.timeIntervalSince1970.isFinite,
-                  let value = try? ProgressUpdate(name: item.name, progress: item.progress, etaSeconds: 0).validated(),
+                  let value = try? ProgressUpdate(name: item.name, progress: item.progress, etaSeconds: 0,
+                                                 project: item.project, projectIcon: item.projectIcon).validated(),
                   value.name == item.name, names.insert(item.name).inserted else { continue }
-            items.append(item)
+            var restored = item
+            restored.project = value.project.flatMap { $0.isEmpty ? nil : $0 }
+            restored.projectIcon = value.projectIcon
+            items.append(restored)
         }
         dismissed = Set(snapshot.dismissed.filter { !names.contains($0) })
     }
@@ -79,13 +101,18 @@ public final class ProgressRegistry {
             items[index].progress = value.progress
             items[index].expectedFinish = now.addingTimeInterval(value.etaSeconds)
             items[index].completing = value.progress == 100
+            if let project = value.project { items[index].project = project.isEmpty ? nil : project }
+            if let projectIcon = value.projectIcon { items[index].projectIcon = projectIcon }
+            if value.project?.isEmpty == true { items[index].projectIcon = nil }
             return items[index].completing
         }
         // Unknown completions are no-ops, so retries cannot create phantom notifications.
         guard value.progress < 100 else { return false }
         guard items.count < 50 else { throw APIError(409, "At most 50 active items are supported") }
         items.append(ProgressItem(id: UUID(), name: value.name, progress: value.progress,
-                                  expectedFinish: now.addingTimeInterval(value.etaSeconds), completing: false))
+                                  expectedFinish: now.addingTimeInterval(value.etaSeconds), completing: false,
+                                  project: value.project.flatMap { $0.isEmpty ? nil : $0 },
+                                  projectIcon: value.projectIcon))
         return false
     }
 

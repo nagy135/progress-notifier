@@ -27,8 +27,8 @@ def call(path, method="GET", body=None, headers=None, status=200):
         return result
 
 
-def update(name, progress, eta=30):
-    return call("/items", "POST", json.dumps({"name": name, "progress": progress, "etaSeconds": eta}).encode(),
+def update(name, progress, eta=30, **metadata):
+    return call("/items", "POST", json.dumps({"name": name, "progress": progress, "etaSeconds": eta, **metadata}).encode(),
                 {"Content-Type": "application/json"})
 
 
@@ -42,16 +42,26 @@ def dismiss(name):
 
 try:
     assert call("/health")["app"] == "progress-notifier"
-    update(names[0], 0, 120)
-    update(names[1], 10, 90)
+    icon = {"kind": "lucide", "name": "snowflake", "color": "blue"}
+    update(names[0], 0, 120, project="progress-notifier")
+    update(names[1], 10, 90, project="nix-darwin", projectIcon=icon)
     assert len(items()) == 2
     with ThreadPoolExecutor(max_workers=2) as pool:
         list(pool.map(lambda name: update(name, 42, 60), names))
     assert all(item["progress"] == 42 and 55 <= item["etaSeconds"] <= 60 for item in items())
+    assert items()[0]["project"] == "progress-notifier"
+    assert items()[1]["projectIcon"] == icon
+    update(names[1], 42, 45)  # ETA-only updates keep the icon and trigger a new pulse.
+    assert items()[1]["projectIcon"] == icon
 
     call("/items", "POST", b'{"name":"bad","progress":101,"etaSeconds":0}',
          {"Content-Type": "application/json"}, status=400)
     call("/items", "POST", b'{}', {"Content-Type": "application/json"}, status=400)
+    for metadata in [{"project": 42}, {"projectIcon": "snowflake"},
+                     {"projectIcon": {"kind": "lucide", "name": "../file", "color": "blue"}},
+                     {"projectIcon": {"kind": "emoji", "emoji": ""}}]:
+        body = {"name": names[0], "progress": 42, "etaSeconds": 30, **metadata}
+        call("/items", "POST", json.dumps(body).encode(), {"Content-Type": "application/json"}, status=400)
     call("/items", "POST", b'not json', {"Content-Type": "application/json"}, status=400)
     call("/items", "POST", b'{}', {"Content-Type": "text/plain"}, status=415)
     call("/items", "POST", b'{}', {"Content-Type": "application/json", "Origin": "https://example.com"}, status=403)
@@ -75,6 +85,8 @@ try:
             response += data
         assert response.startswith(b"HTTP/1.1 200"), response
     assert next(item for item in items() if item["name"] == names[0])["progress"] == 73
+    update(names[0], 73, 20, project="")
+    assert "project" not in items()[0] and "projectIcon" not in items()[0]
 
     dismiss(names[1])
     update(names[1], 60)
@@ -88,7 +100,7 @@ try:
     assert not items()
     update(names[0], 100, 0)
     assert not items()
-    print("PASS: live API, concurrent updates, validation, fragmented HTTP, dismissal, and automatic completion")
+    print("PASS: live API, project metadata/icons, legacy and ETA-only updates, validation, fragmented HTTP, dismissal, and completion")
 finally:
     for name in names:
         try:

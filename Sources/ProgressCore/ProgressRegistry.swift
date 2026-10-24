@@ -41,11 +41,30 @@ public struct APIError: Error {
     public init(_ status: Int, _ message: String) { self.status = status; self.message = message }
 }
 
+public struct ProgressSnapshot: Codable {
+    public let items: [ProgressItem]
+    public let dismissed: [String]
+}
+
 /// Accessed on the main queue. Dismissed names stay silent until their client sends 100%.
 public final class ProgressRegistry {
     public private(set) var items: [ProgressItem] = []
     private var dismissed = Set<String>()
-    public init() {}
+    public init(snapshot: ProgressSnapshot? = nil) {
+        guard let snapshot else { return }
+        var names = Set<String>()
+        for item in snapshot.items where !item.completing && item.progress < 100 {
+            guard items.count < 50, item.expectedFinish.timeIntervalSince1970.isFinite,
+                  let value = try? ProgressUpdate(name: item.name, progress: item.progress, etaSeconds: 0).validated(),
+                  value.name == item.name, names.insert(item.name).inserted else { continue }
+            items.append(item)
+        }
+        dismissed = Set(snapshot.dismissed.filter { !names.contains($0) })
+    }
+
+    public var snapshot: ProgressSnapshot {
+        ProgressSnapshot(items: items.filter { !$0.completing }, dismissed: dismissed.sorted())
+    }
 
     /// Returns true exactly once when an item enters its completion animation.
     @discardableResult

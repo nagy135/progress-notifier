@@ -2,6 +2,32 @@ import XCTest
 @testable import ProgressCore
 
 final class ProgressCoreTests: XCTestCase {
+    func testSnapshotRestoresIdentityEstimateAndDismissals() throws {
+        let registry = ProgressRegistry()
+        let now = Date(timeIntervalSince1970: 1000)
+        try registry.update(.init(name: "Build", progress: 45, etaSeconds: 30), now: now)
+        try registry.update(.init(name: "Tests", progress: 10, etaSeconds: 10), now: now)
+        registry.dismiss(name: "Tests")
+        let data = try JSONEncoder().encode(registry.snapshot)
+        let restored = ProgressRegistry(snapshot: try JSONDecoder().decode(ProgressSnapshot.self, from: data))
+        XCTAssertEqual(restored.items[0].id, registry.items[0].id)
+        XCTAssertEqual(restored.items[0].progress, 45)
+        XCTAssertEqual(restored.items[0].expectedFinish.timeIntervalSince1970, 1030)
+        try restored.update(.init(name: "Tests", progress: 70, etaSeconds: 0))
+        XCTAssertEqual(restored.items.count, 1)
+        try restored.update(.init(name: "Tests", progress: 100, etaSeconds: 0))
+        try restored.update(.init(name: "Tests", progress: 0, etaSeconds: 30))
+        XCTAssertEqual(restored.items.count, 2)
+    }
+
+    func testCompletionIsNotRestoredOrReplayed() throws {
+        let registry = ProgressRegistry()
+        try registry.update(.init(name: "Build", progress: 10, etaSeconds: 10))
+        try registry.update(.init(name: "Build", progress: 100, etaSeconds: 0))
+        let restored = ProgressRegistry(snapshot: registry.snapshot)
+        XCTAssertTrue(restored.items.isEmpty)
+    }
+
     func testUpdatesPreserveIdentityAndReplaceEstimate() throws {
         let registry = ProgressRegistry()
         let now = Date(timeIntervalSince1970: 1000)

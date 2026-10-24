@@ -2,7 +2,9 @@ import AppKit
 import SwiftUI
 
 private final class ProgressPanel: NSPanel {
+    var hideProgress: (() -> Void)?
     override var canBecomeKey: Bool { true }
+    override func close() { hideProgress?() }
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -12,8 +14,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var statusLine: NSMenuItem?
     private var screenObserver: NSObjectProtocol?
+    private var keyboardMonitor: Any?
+    private var windowHidden = false
+    private var compact = UserDefaults.standard.bool(forKey: "compactMode")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        let appMenu = NSMenu()
+        let hide = NSMenuItem(title: "Close Progress Window", action: #selector(hideProgress), keyEquivalent: "w")
+        hide.target = self
+        appMenu.addItem(hide)
+        appMenu.addItem(withTitle: "Quit Progress Notifier", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        let mainMenu = NSMenu()
+        let appItem = NSMenuItem()
+        appItem.submenu = appMenu
+        mainMenu.addItem(appItem)
+        NSApp.mainMenu = mainMenu
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         item.button?.image = NSImage(systemSymbolName: "chart.bar.fill", accessibilityDescription: "Progress Notifier")
         let menu = NSMenu()
@@ -23,6 +38,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let show = NSMenuItem(title: "Show Progress", action: #selector(showProgress), keyEquivalent: "")
         show.target = self
         menu.addItem(show)
+        let hideItem = NSMenuItem(title: "Close Progress Window", action: #selector(hideProgress), keyEquivalent: "")
+        hideItem.target = self
+        menu.addItem(hideItem)
         menu.addItem(withTitle: "Quit Progress Notifier", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         item.menu = menu
         statusItem = item
@@ -39,7 +57,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.isReleasedWhenClosed = false
         panel.isMovableByWindowBackground = true
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.hideProgress = { [weak self] in self?.hideProgress() }
         self.panel = panel
+        keyboardMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, event.window === self.panel,
+                  event.modifierFlags.intersection([.command, .control, .option]).isEmpty else { return event }
+            switch event.charactersIgnoringModifiers?.lowercased() {
+            case "q": self.hideProgress(); return nil
+            case "m": self.toggleCompact(); return nil
+            default: return event
+            }
+        }
         model.changed = { [weak self] in self?.refreshPanel() }
         server.handle = { [weak self] request in
             self?.model.handle(request) ?? HTTPResponse(500, ["error": "App unavailable"])
@@ -53,6 +81,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.refreshPanel(reposition: true)
         }
         do { try server.start() } catch { fail(error.localizedDescription) }
+        refreshPanel()
     }
 
     private func fail(_ message: String) {
@@ -65,30 +94,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func showProgress() {
-        if model.items.isEmpty {
-            let alert = NSAlert()
-            alert.messageText = "Ready for progress"
-            alert.informativeText = "Send an item to http://127.0.0.1:8766/items. Progress cards appear automatically."
-            alert.runModal()
-        } else { panel?.orderFrontRegardless() }
+        windowHidden = false
+        refreshPanel()
+        panel?.makeKeyAndOrderFront(nil)
+    }
+
+    @objc private func hideProgress() {
+        windowHidden = true
+        panel?.orderOut(nil)
+    }
+
+    private func toggleCompact() {
+        compact.toggle()
+        UserDefaults.standard.set(compact, forKey: "compactMode")
+        refreshPanel()
     }
 
     private func refreshPanel(reposition: Bool = false) {
         guard let panel else { return }
         statusItem?.button?.title = model.items.isEmpty ? "" : " \(model.items.count)"
-        guard !model.items.isEmpty else { panel.orderOut(nil); return }
+        guard !windowHidden else { return }
         let screen = panel.screen ?? NSScreen.main ?? NSScreen.screens.first
         guard let screen else { return }
         let maximumHeight = max(160, screen.visibleFrame.height - 48)
         let wasVisible = panel.isVisible
         let hosting = panel.contentView as? NSHostingView<ProgressCard>
-        let root = ProgressCard(model: model, maximumHeight: maximumHeight)
+        let root = ProgressCard(model: model, maximumHeight: maximumHeight, compact: compact,
+                                toggleCompact: { [weak self] in self?.toggleCompact() },
+                                close: { [weak self] in self?.hideProgress() })
         if let hosting { hosting.rootView = root }
         else { panel.contentView = NSHostingView(rootView: root) }
-        let height = min(CGFloat(model.items.count) * 116 + 82, maximumHeight)
+        let height = compact ? 56 : model.items.isEmpty ? 210 : min(CGFloat(model.items.count) * 124 + 82, maximumHeight)
         var frame = panel.frame
+        let rightEdge = frame.maxX
         frame.origin.y += frame.height - height
-        frame.size = NSSize(width: 370, height: height)
+        frame.size = NSSize(width: compact ? 216 : 370, height: height)
+        frame.origin.x = rightEdge - frame.width
         if !wasVisible || reposition {
             frame.origin = NSPoint(x: screen.visibleFrame.maxX - frame.width - 6,
                                    y: screen.visibleFrame.maxY - frame.height - 6)
@@ -99,10 +140,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        if !model.items.isEmpty { panel?.orderFrontRegardless() }
+        showProgress()
         return true
     }
-    func applicationWillTerminate(_ notification: Notification) { server.stop() }
+    func applicationWillTerminate(_ notification: Notification) {
+        if let keyboardMonitor { NSEvent.removeMonitor(keyboardMonitor) }
+        server.stop()
+    }
 }
 
 @main

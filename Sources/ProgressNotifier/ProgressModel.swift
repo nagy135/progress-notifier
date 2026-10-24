@@ -4,9 +4,18 @@ import ProgressCore
 
 final class ProgressModel: ObservableObject {
     @Published private(set) var items: [ProgressItem] = []
-    private let registry = ProgressRegistry()
+    private let registry: ProgressRegistry
+    private let stateURL: URL
     var changed: (() -> Void)?
     private var sound: NSSound?
+
+    init() {
+        stateURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Progress Notifier/state.json")
+        let snapshot = (try? Data(contentsOf: stateURL)).flatMap { try? JSONDecoder().decode(ProgressSnapshot.self, from: $0) }
+        registry = ProgressRegistry(snapshot: snapshot)
+        items = registry.items
+    }
 
     func dismiss(_ name: String) { registry.dismiss(name: name); publish() }
 
@@ -21,7 +30,7 @@ final class ProgressModel: ObservableObject {
         // Standard clients encode query spaces as +; an actual plus arrives as %2B.
         url.percentEncodedQuery = url.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%20")
         if url.path == "/health", request.method == "GET" {
-            return HTTPResponse(["app": "progress-notifier", "version": "1.0.0", "status": "ok"])
+            return HTTPResponse(["app": "progress-notifier", "version": "1.1.0", "status": "ok"])
         }
         guard url.path == "/items" else { return HTTPResponse(404, ["error": "Unknown endpoint"]) }
         switch request.method {
@@ -64,6 +73,10 @@ final class ProgressModel: ObservableObject {
 
     private func publish() {
         withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) { items = registry.items }
+        do {
+            try FileManager.default.createDirectory(at: stateURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try JSONEncoder().encode(registry.snapshot).write(to: stateURL, options: .atomic)
+        } catch { NSLog("Could not save progress: %@", error.localizedDescription) }
         changed?()
     }
 }

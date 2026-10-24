@@ -13,11 +13,11 @@ cd ~/Code/progress-notifier
 open 'build/Progress Notifier.app'
 ```
 
-The app waits silently with a menu bar icon. New items show the floating panel without taking keyboard focus. Drag its background to move it. Large stacks scroll. Move the bundle to `/Applications` if desired. It is locally ad-hoc signed, not notarized.
+Opening the app shows a floating panel and a menu bar icon. With no items it says “No progress”. Drag its background to move it. Large stacks scroll. Click anywhere except an X, or press M, to toggle between the full list and a tiny task counter. Q, ⌘W, or the window's X hides the window while updates continue in the background. Updates keep it hidden until you open the app again or choose Show Progress from the menu bar. ⌘Q or the menu bar's Quit stops the app. Move the bundle to `/Applications` if desired. It is locally ad-hoc signed, not notarized.
 
 ## Send progress
 
-Using the included Python 3 client (starts the built app if needed):
+Using the included Python 3 client while the app is running:
 
 ```sh
 ./scripts/progress-notify 'Build release' 0 180
@@ -43,7 +43,9 @@ The three fields are required:
 
 The ETA counts down independently of progress. Expired estimates say “Finishing soon”; only a client can mark an item complete. At 100%, an existing item flashes green, scales up, plays the macOS Glass sound, and disappears after 1.25 seconds. Reduce Motion disables the scale effect. Repeated completion requests do not play extra sounds. Unknown completions do not create cards.
 
-Click an item's X to dismiss it. Updates for that name stay silent until its client sends 100%; the name is then available for a new run. Dismissal does not cancel the client's actual work. When all cards close, the app keeps listening. Use the menu bar icon to show progress or quit. State is in memory only.
+Click an item's X to dismiss it. Updates for that name stay silent until its client sends 100%; the name is then available for a new run. Dismissal does not cancel the client's actual work. When the last card disappears, the window stays visible with “No progress” (unless you hid it). Items and dismissals are saved to `~/Library/Application Support/Progress Notifier/state.json` and restored after relaunch. Completed items are never restored. Compact mode is also remembered.
+
+The client **never starts the app**. When the app is stopped or unavailable, calls silently succeed without sending or queuing updates. Use `--require-running` for explicit diagnostics; `--no-launch` remains an alias for this strict mode.
 
 ## API
 
@@ -61,7 +63,7 @@ Invalid input returns JSON `{"error":"…"}` with an HTTP 4xx status. Supports H
 ```sh
 ./scripts/progress-notify --list
 ./scripts/progress-notify --dismiss 'Build release'
-./scripts/progress-notify --health --no-launch
+./scripts/progress-notify --health --require-running
 ```
 
 ## Agent skill
@@ -72,6 +74,7 @@ The self-contained skill is in [`skills/progress-notifier`](skills/progress-noti
 
 ```sh
 swift test
+python3 -m unittest discover -s Tests/ClientTests
 ./scripts/build.sh
 open 'build/Progress Notifier.app'
 python3 scripts/smoke-test.py

@@ -68,6 +68,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         keyboardMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, event.window === self.panel,
                   event.modifierFlags.intersection([.command, .control, .option]).isEmpty else { return event }
+            if event.keyCode == 53 { // Escape releases focus without hiding the panel.
+                self.panel?.resignKey()
+                if NSApp.isActive { NSApp.deactivate() }
+                return nil
+            }
             switch event.charactersIgnoringModifiers?.lowercased() {
             case "q": self.hideProgress(); return nil
             case "m": self.toggleCompact(); return nil

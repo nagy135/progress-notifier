@@ -58,7 +58,7 @@ final class ProgressModel: ObservableObject {
         // Standard clients encode query spaces as +; an actual plus arrives as %2B.
         url.percentEncodedQuery = url.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%20")
         if url.path == "/health", request.method == "GET" {
-            return HTTPResponse(["app": "progress-notifier", "version": "1.4.2", "status": "ok"])
+            return HTTPResponse(["app": "progress-notifier", "version": "1.4.3", "status": "ok"])
         }
         guard url.path == "/items" else { return HTTPResponse(404, ["error": "Unknown endpoint"]) }
         switch request.method {

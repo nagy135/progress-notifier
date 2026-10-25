@@ -67,12 +67,15 @@ Send a short description of what just happened with a progress update:
 ```
 
 The default card shows the latest description, its timestamp, current progress, and the
-number of saved updates as a down arrow and count to the left of the progress bar.
+number of earlier descriptions as a down arrow and count to the left of the progress bar.
+The current description is excluded: two saved entries show a count of one. The arrow
+is hidden when no earlier descriptions are available.
 The indicator disappears while that task’s description ledger is unfolded. Press **D**
 while the panel has focus, or click **Show updates**,
 to unfold the ledger for the **focused task only**. Select the next task with Down or
 J, and the previous task with Up or K. A mint outline marks selection in both expanded
-and compact modes. Navigation stops at the first and last tasks. Progress updates and
+and compact modes, with a stronger fill and outline in compact mode. Switching modes
+keeps the panel focused so arrow and J/K navigation continues working. Navigation stops at the first and last tasks. Progress updates and
 new tasks keep the same selection; removing the focused task selects its next neighbor,
 or the previous one when it was last.
 
@@ -85,7 +88,8 @@ change H/C completed-task history. Update details start folded after relaunch.
 
 Each described update is a snapshot of the task's overall progress, not a separate
 subtask. The latest 200 snapshots per task are saved across relaunches and completed-task
-recall. Counts include the latest entry and reflect retained entries. New updates are
+recall. The API’s `updateCount` includes the latest entry and reflects all retained entries;
+the on-card arrow counts only the earlier descriptions. New updates are
 ordered by server receipt, including when percentages decrease or timestamps tie.
 Consecutive identical description/percentage pairs do not add duplicate entries or
 change the original timestamp; ETA updates still apply. Omitted, null, or blank

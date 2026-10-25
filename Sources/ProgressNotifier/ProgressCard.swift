@@ -199,6 +199,7 @@ private struct ItemCard: View {
     }
 
     private var latest: ProgressEntry? { item.updates.first }
+    private var earlierUpdateCount: Int { max(0, item.updates.count - 1) }
     private var noteMatchesProgress: Bool { latest?.progress == item.progress }
 
     private var details: some View {
@@ -257,15 +258,15 @@ private struct ItemCard: View {
                 Color.clear
                     .frame(width: blend(22, latest == nil ? 0 : 38, expansion), height: 16)
                     .overlay(alignment: .leading) {
-                        if latest != nil {
+                        if earlierUpdateCount > 0 {
                             HStack(spacing: 3) {
                                 Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold))
-                                Text("\(item.updates.count)").font(.system(size: 10, weight: .medium)).monospacedDigit()
+                                Text("\(earlierUpdateCount)").font(.system(size: 10, weight: .medium)).monospacedDigit()
                             }
                             .foregroundStyle(.secondary)
                             .opacity(updatesUnfolded || historyHeight > 0.5 ? 0 : detailOpacity)
                             .accessibilityElement(children: .ignore)
-                            .accessibilityLabel("\(item.updates.count) saved updates")
+                            .accessibilityLabel("\(earlierUpdateCount) earlier updates")
                             .accessibilityHidden(updatesUnfolded || historyHeight > 0.5 || expansion < 0.5)
                         }
                     }
@@ -313,10 +314,11 @@ private struct ItemCard: View {
                               scale: 1 + 0.035 * expansion))
         .overlay {
             RoundedRectangle(cornerRadius: blend(4, 12, expansion))
-                .fill(Color.mint.opacity(selected ? 0.055 : 0))
+                .fill(Color.mint.opacity(selected ? blend(0.18, 0.055, expansion) : 0))
                 .overlay {
                     RoundedRectangle(cornerRadius: blend(4, 12, expansion))
-                        .strokeBorder(Color.mint.opacity(selected ? (panelFocused ? 0.8 : 0.3) : 0), lineWidth: 1)
+                        .strokeBorder(Color.mint.opacity(selected ? (panelFocused ? 0.9 : 0.6) : 0),
+                                      lineWidth: blend(1.5, 1, expansion))
                 }
                 .allowsHitTesting(false)
         }

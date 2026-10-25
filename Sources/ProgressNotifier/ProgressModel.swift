@@ -111,10 +111,9 @@ final class ProgressModel: ObservableObject {
         let ids = Set(registry.items.map(\.id))
         revisions = revisions.filter { ids.contains($0.key) }
         flashedRevisions = flashedRevisions.filter { ids.contains($0.key) }
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-            items = registry.items
-            recalledItems = registry.revealedHistory
-        }
+        // Presentation owns geometry animation; publishing must not start a competing spring.
+        items = registry.items
+        recalledItems = registry.revealedHistory
         do {
             try FileManager.default.createDirectory(at: stateURL.deletingLastPathComponent(), withIntermediateDirectories: true)
             try JSONEncoder().encode(registry.snapshot).write(to: stateURL, options: .atomic)

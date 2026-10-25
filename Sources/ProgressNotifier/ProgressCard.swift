@@ -101,13 +101,6 @@ private struct UpdatePulse: ViewModifier {
     }
 }
 
-/// Shared by the window and its contents so every part follows the same resize.
-final class ProgressPresentation: ObservableObject {
-    @Published var expansion: CGFloat
-
-    init(compact: Bool) { expansion = compact ? 0 : 1 }
-}
-
 private func blend(_ compact: CGFloat, _ expanded: CGFloat, _ expansion: CGFloat) -> CGFloat {
     compact + (expanded - compact) * expansion
 }
@@ -126,7 +119,7 @@ private struct ItemCard: View {
     let now: Date
     let expansion: CGFloat
     let dismiss: () -> Void
-    @State private var detailsHeight: CGFloat = 64
+    let detailsHeight: CGFloat
 
     private var tint: Color { item.completing ? .green : Color(red: 0.23, green: 0.72, blue: 0.64) }
     private var detailOpacity: Double { Double(max(0, (expansion - 0.25) / 0.75)) }
@@ -205,23 +198,16 @@ private struct ItemCard: View {
                               tint: tint, cornerRadius: blend(4, 12, expansion),
                               scale: 1 + 0.035 * expansion))
         .help(item.name)
-        .onPreferenceChange(ItemDetailsHeightsKey.self) { heights in
-            if let height = heights[item.id], abs(detailsHeight - height) > 0.5 { detailsHeight = height }
-        }
     }
 }
 
 struct ProgressCard: View {
-    static let transitionDuration: TimeInterval = 0.16
-    static let expandedChromeHeight: CGFloat = 80
     static let compactRowHeight: CGFloat = 20
     static let compactRowSpacing: CGFloat = 2
 
     @ObservedObject var model: ProgressModel
     @ObservedObject var presentation: ProgressPresentation
-    let maximumHeight: CGFloat
-    let expandedContentHeight: CGFloat?
-    let contentHeightChanged: (CGFloat) -> Void
+    let detailsHeightsChanged: ([UUID: CGFloat]) -> Void
     let toggleCompact: () -> Void
     let close: () -> Void
     @State private var buttonFrames: [CGRect] = []
@@ -231,24 +217,6 @@ struct ProgressCard: View {
 
     static func horizontalInset(expansion: CGFloat) -> CGFloat { blend(12, 14, expansion) }
     static func verticalInset(expansion: CGFloat) -> CGFloat { blend(8, 14, expansion) }
-
-    static func compactContentHeight(itemCount: Int) -> CGFloat {
-        max(compactRowHeight, CGFloat(itemCount) * (compactRowHeight + compactRowSpacing) - compactRowSpacing)
-    }
-
-    static func contentHeight(itemCount: Int, expandedContentHeight: CGFloat?,
-                              maximumHeight: CGFloat, expansion: CGFloat) -> CGFloat {
-        let expanded = itemCount == 0 ? 100 : expandedContentHeight ?? CGFloat(itemCount) * 100 + 8
-        return blend(min(compactContentHeight(itemCount: itemCount), maximumHeight - 36),
-                     min(expanded, maximumHeight - expandedChromeHeight), expansion)
-    }
-
-    static func windowHeight(itemCount: Int, expandedContentHeight: CGFloat?,
-                             maximumHeight: CGFloat, expansion: CGFloat) -> CGFloat {
-        20 + 2 * verticalInset(expansion: expansion) + 32 * expansion
-            + contentHeight(itemCount: itemCount, expandedContentHeight: expandedContentHeight,
-                            maximumHeight: maximumHeight, expansion: expansion)
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -266,40 +234,39 @@ struct ProgressCard: View {
             .padding(.bottom, 8 * expansion)
             .accessibilityHidden(expansion < 0.5)
 
-            Group {
-                if model.displayItems.isEmpty {
-                    VStack(spacing: 8 * expansion) {
-                        Image(systemName: "checkmark.circle")
-                            .font(.system(size: blend(16, 26, expansion), weight: .light))
-                            .foregroundStyle(.mint)
-                        Text("No progress").font(.system(size: 14, weight: .medium))
-                            .frame(height: 17 * expansion).opacity(Double(expansion)).clipped()
-                        Text(model.hasHistory ? "Press H to recall a completed result" : "Waiting for tasks…")
-                            .font(.system(size: 11)).foregroundStyle(.secondary)
-                            .frame(height: 14 * expansion).opacity(Double(expansion)).clipped()
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    ScrollView {
-                        TimelineView(.periodic(from: .now, by: 1)) { context in
-                            VStack(spacing: blend(Self.compactRowSpacing, 6, expansion)) {
-                                ForEach(model.displayItems) { item in
-                                    ItemCard(item: item, revision: model.revision(for: item),
-                                             consumeUpdatePulse: { model.consumeUpdatePulse(for: item) },
-                                             now: context.date, expansion: expansion) { model.dismiss(item) }
-                                        .transition(.opacity)
-                                }
-                            }
-                            .padding(4 * expansion)
+            ScrollView(.vertical, showsIndicators: presentation.needsScrolling) {
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    VStack(spacing: 0) {
+                        ForEach(Array(presentation.rows.enumerated()), id: \.element.id) { index, row in
+                            ItemCard(item: row.item, revision: model.revision(for: row.item),
+                                     consumeUpdatePulse: { model.consumeUpdatePulse(for: row.item) },
+                                     now: context.date, expansion: expansion,
+                                     dismiss: { model.dismiss(row.item) }, detailsHeight: row.detailsHeight)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .frame(height: (20 + (row.detailsHeight + 22) * expansion) * row.presence,
+                                       alignment: .top)
+                                .opacity(Double(row.presence)).clipped()
+                                .allowsHitTesting(row.presence > 0.95)
+                                .accessibilityHidden(row.presence < 0.5)
+                                .padding(.top, presentation.spacing(before: index))
                         }
+                        emptyState
+                            .frame(height: 20 + 80 * expansion)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(height: (20 + 80 * expansion) * presentation.emptyPresence, alignment: .top)
+                            .opacity(Double(presentation.emptyPresence)).clipped()
+                            .accessibilityHidden(presentation.emptyPresence < 0.5)
                     }
-                    .scrollIndicators(.hidden)
+                    .padding(.vertical, 4 * expansion * (1 - presentation.emptyPresence))
+                    .padding(.horizontal, 4 * expansion)
+                    .frame(height: presentation.naturalContentHeight, alignment: .top)
                 }
             }
+            .scrollDisabled(!presentation.needsScrolling)
             .padding(.trailing, 32 * (1 - expansion))
-            .frame(height: Self.contentHeight(itemCount: model.displayItems.count,
-                                             expandedContentHeight: expandedContentHeight,
-                                             maximumHeight: maximumHeight, expansion: expansion))
+            .frame(height: presentation.contentHeight, alignment: .top)
+            .clipped()
+
         }
         .padding(.horizontal, Self.horizontalInset(expansion: expansion))
         .padding(.vertical, Self.verticalInset(expansion: expansion))
@@ -329,15 +296,26 @@ struct ProgressCard: View {
         .coordinateSpace(name: "progressCard")
         .onPreferenceChange(ButtonFramesKey.self) { buttonFrames = $0 }
         .onPreferenceChange(ItemDetailsHeightsKey.self) { heights in
-            let items = model.displayItems
-            guard !items.isEmpty, items.allSatisfy({ heights[$0.id] != nil }) else { return }
-            let height = items.reduce(CGFloat(8)) { $0 + (heights[$1.id] ?? 0) + 42 }
-                + CGFloat(max(0, items.count - 1)) * 6
-            DispatchQueue.main.async { contentHeightChanged(height) }
+            DispatchQueue.main.async { detailsHeightsChanged(heights) }
         }
         .contentShape(Rectangle())
         .simultaneousGesture(SpatialTapGesture().onEnded { value in
             if !buttonFrames.contains(where: { $0.contains(value.location) }) { toggleCompact() }
         })
     }
+
+    private var emptyState: some View {
+        VStack(spacing: 8 * expansion) {
+            Image(systemName: "checkmark.circle")
+                .font(.system(size: blend(16, 26, expansion), weight: .light))
+                .foregroundStyle(.mint)
+            Text("No progress").font(.system(size: 14, weight: .medium))
+                .frame(height: 17 * expansion).opacity(Double(expansion)).clipped()
+            Text(model.hasHistory ? "Press H to recall a completed result" : "Waiting for tasks…")
+                .font(.system(size: 11)).foregroundStyle(.secondary)
+                .frame(height: 14 * expansion).opacity(Double(expansion)).clipped()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
 }

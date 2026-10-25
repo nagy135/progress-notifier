@@ -8,6 +8,7 @@ let package = Package(
     targets: [
         .target(name: "ProgressCore"),
         .executableTarget(name: "ProgressNotifier", dependencies: ["ProgressCore"], resources: [.process("Resources")]),
-        .testTarget(name: "ProgressCoreTests", dependencies: ["ProgressCore"])
+        .testTarget(name: "ProgressCoreTests", dependencies: ["ProgressCore"]),
+        .testTarget(name: "ProgressNotifierTests", dependencies: ["ProgressNotifier", "ProgressCore"])
     ]
 )

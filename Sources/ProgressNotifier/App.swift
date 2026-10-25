@@ -18,8 +18,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var windowHidden = false
     private var compact = UserDefaults.standard.bool(forKey: "compactMode")
     private let presentation = ProgressPresentation(compact: UserDefaults.standard.bool(forKey: "compactMode"))
-    private var resizeTimer: Timer?
-    private var expandedContentHeight: CGFloat?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let appMenu = NSMenu()
@@ -81,6 +79,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             default: return event
             }
         }
+        presentation.geometryChanged = { [weak self] in self?.resizePanel() }
         model.changed = { [weak self] in self?.refreshPanel() }
         server.handle = { [weak self] request in
             self?.model.handle(request) ?? HTTPResponse(500, ["error": "App unavailable"])
@@ -124,37 +123,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func setCompact(_ compact: Bool) {
         self.compact = compact
         UserDefaults.standard.set(compact, forKey: "compactMode")
-        resizeTimer?.invalidate()
-        resizeTimer = nil
-        let target: CGFloat = compact ? 0 : 1
-        let start = presentation.expansion
-        guard panel?.isVisible == true, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
-              abs(target - start) > 0.001 else {
-            presentation.expansion = target
-            refreshPanel()
-            return
-        }
-        let startedAt = ProcessInfo.processInfo.systemUptime
-        let duration = ProgressCard.transitionDuration * Double(max(0.25, abs(target - start)))
-        let timer = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] timer in
-            guard let self else { timer.invalidate(); return }
-            let elapsed = ProcessInfo.processInfo.systemUptime - startedAt
-            let fraction = min(1, elapsed / duration)
-            let eased = fraction * fraction * (3 - 2 * fraction)
-            // One clock drives both SwiftUI geometry and the native window, including reversals.
-            var transaction = Transaction()
-            transaction.disablesAnimations = true
-            withTransaction(transaction) {
-                self.presentation.expansion = start + (target - start) * CGFloat(eased)
-                self.resizePanel()
-            }
-            if fraction >= 1 {
-                timer.invalidate()
-                self.resizeTimer = nil
-            }
-        }
-        resizeTimer = timer
-        RunLoop.main.add(timer, forMode: .common)
         refreshPanel()
     }
 
@@ -183,23 +151,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard !windowHidden else { return }
         let screen = panel.screen ?? NSScreen.main ?? NSScreen.screens.first
         guard let screen else { return }
-        let maximumHeight = max(160, screen.visibleFrame.height - 48)
-        let hosting = panel.contentView as? NSHostingView<ProgressCard>
-        let root = ProgressCard(model: model, presentation: presentation, maximumHeight: maximumHeight,
-                                expandedContentHeight: expandedContentHeight,
-                                contentHeightChanged: { [weak self] height in
-                                    guard let self, abs((self.expandedContentHeight ?? 0) - height) > 0.5 else { return }
-                                    self.expandedContentHeight = height
-                                    self.refreshPanel()
-                                },
-                                toggleCompact: { [weak self] in self?.toggleCompact() },
-                                close: { [weak self] in self?.hideProgress() })
-        if let hosting { hosting.rootView = root }
-        else {
-            let hosting = NSHostingView(rootView: root)
+        presentation.maximumHeight = max(160, screen.visibleFrame.height - 48)
+        if panel.contentView as? NSHostingView<PanelContent<ProgressCard>> == nil {
+            let root = ProgressCard(model: model, presentation: presentation,
+                                    detailsHeightsChanged: { [weak self] heights in
+                                        guard let self else { return }
+                                        self.presentation.measure(heights, animated: self.panel?.isVisible == true)
+                                    },
+                                    toggleCompact: { [weak self] in self?.toggleCompact() },
+                                    close: { [weak self] in self?.hideProgress() })
+            let hosting = NSHostingView(rootView: PanelContent { root })
             hosting.sizingOptions = []
             panel.contentView = hosting
         }
+        presentation.update(items: model.displayItems, compact: compact, animated: panel.isVisible)
         resizePanel(reposition: reposition)
         panel.orderFrontRegardless()
     }
@@ -207,11 +172,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func resizePanel(reposition: Bool = false) {
         guard let panel, !windowHidden,
               let screen = panel.screen ?? NSScreen.main ?? NSScreen.screens.first else { return }
-        let maximumHeight = max(160, screen.visibleFrame.height - 48)
-        let height = ProgressCard.windowHeight(itemCount: model.displayItems.count,
-                                               expandedContentHeight: expandedContentHeight,
-                                               maximumHeight: maximumHeight,
-                                               expansion: presentation.expansion)
+        let height = presentation.windowHeight
         var frame = panel.frame
         let rightEdge = frame.maxX
         frame.origin.y += frame.height - height
@@ -240,7 +201,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        resizeTimer?.invalidate()
         if let keyboardMonitor { NSEvent.removeMonitor(keyboardMonitor) }
         server.stop()
     }

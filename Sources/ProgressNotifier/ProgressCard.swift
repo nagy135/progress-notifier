@@ -230,6 +230,7 @@ private struct ItemCard: View {
     private var latest: ProgressEntry? { item.updates.first }
     private var earlierUpdateCount: Int { max(0, item.updates.count - 1) }
     private var noteMatchesProgress: Bool { latest?.progress == item.progress }
+    private var completionHeaderHeight: CGFloat { item.completing ? 32 : 0 }
 
     private var details: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -253,8 +254,18 @@ private struct ItemCard: View {
                 }
             }
         }
-        // All measurements use the final text width, even while the panel is compact.
+        // Measure at the final text width, and center completion over the whole card.
         .frame(width: ProgressCard.detailsWidth, alignment: .leading)
+        .padding(.top, completionHeaderHeight)
+        .overlay(alignment: .top) {
+            if item.completing {
+                Image(systemName: "checkmark.circle.fill")
+                    .symbolRenderingMode(.palette)
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundStyle(.white, palette.progress(completing: true))
+                    .accessibilityLabel("Completed")
+            }
+        }
         .fixedSize(horizontal: false, vertical: true)
         .background(GeometryReader { proxy in
             Color.clear.preference(key: ItemDetailsHeightsKey.self, value: [item.id: proxy.size.height])
@@ -322,7 +333,7 @@ private struct ItemCard: View {
         .overlay(alignment: .topLeading) {
             ProjectIconView(project: item.project ?? item.name, icon: item.projectIcon)
                 .padding(.leading, 12 * expansion)
-                .padding(.top, blend((ProgressCard.compactRowHeight - 16) / 2, 9, expansion))
+                .padding(.top, blend((ProgressCard.compactRowHeight - 16) / 2, 9 + completionHeaderHeight, expansion))
                 .allowsHitTesting(false)
         }
         .overlay(alignment: .topTrailing) {

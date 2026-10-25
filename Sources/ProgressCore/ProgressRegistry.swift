@@ -170,7 +170,7 @@ public final class ProgressRegistry {
         history.filter { revealedHistoryIDs.contains($0.id) }
     }
 
-    /// Recalls one result per press, newest first, skipping cards still finishing onscreen.
+    /// Recalls one hidden result per press, newest first, skipping automatically shown completions.
     @discardableResult
     public func revealNextCompleted() -> Bool {
         let liveIDs = Set(items.map(\.id))
@@ -209,6 +209,9 @@ public final class ProgressRegistry {
             if items[index].completing {
                 items[index].completedAt = now
                 history.insert(items[index], at: 0)
+                // A completion is visible history immediately, not an expiring card.
+                revealedHistoryIDs.insert(items[index].id)
+                visitedHistoryIDs.insert(items[index].id)
                 history = Array(history.prefix(Self.historyLimit))
                 let ids = Set(history.map(\.id))
                 revealedHistoryIDs.formIntersection(ids)
@@ -237,8 +240,13 @@ public final class ProgressRegistry {
 
     public func dismiss(name: String) {
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let item = items.first(where: { $0.name == name }), !item.completing {
-            dismissed.insert(name)
+        if let item = items.first(where: { $0.name == name }) {
+            if !item.completing { dismissed.insert(name) }
+            revealedHistoryIDs.remove(item.id)
+        } else {
+            // A client's cleanup can hide its retained result after the API's completion phase.
+            // With a new active run, only that active run is dismissed instead.
+            for item in history where item.name == name { revealedHistoryIDs.remove(item.id) }
         }
         items.removeAll { $0.name == name }
     }
@@ -248,10 +256,9 @@ public final class ProgressRegistry {
     }
 
     public func dismiss(id: UUID) {
+        revealedHistoryIDs.remove(id)
         if let item = items.first(where: { $0.id == id }) {
             dismiss(name: item.name)
-        } else {
-            revealedHistoryIDs.remove(id)
         }
     }
 }

@@ -7,6 +7,7 @@ final class ProgressCoreTests: XCTestCase {
         let older = try finish("Older", in: registry)
         let newer = try finish("Newer", in: registry)
         try registry.update(.init(name: "Running", progress: 20, etaSeconds: 60))
+        registry.clearCompleted()
 
         XCTAssertTrue(registry.revealedHistory.isEmpty)
         XCTAssertTrue(registry.revealNextCompleted())
@@ -71,6 +72,7 @@ final class ProgressCoreTests: XCTestCase {
         let registry = ProgressRegistry()
         let older = try finish("Build", in: registry)
         let newer = try finish("Build", in: registry)
+        registry.clearCompleted()
         try registry.update(.init(name: "Build", progress: 10, etaSeconds: 60))
         let runningID = registry.items[0].id
         XCTAssertTrue(registry.revealNextCompleted())
@@ -88,14 +90,17 @@ final class ProgressCoreTests: XCTestCase {
         XCTAssertEqual(registry.revealedHistory.map(\.id), [newer])
     }
 
-    func testNewCompletionsBecomeTheNextRecallWithoutRepeatingVisitedResults() throws {
+    func testNewCompletionsAppearAutomaticallyWithoutRepeatingOnRecall() throws {
         let registry = ProgressRegistry()
         let older = try finish("Older", in: registry)
-        XCTAssertTrue(registry.revealNextCompleted())
+        XCTAssertEqual(registry.revealedHistory.map(\.id), [older])
+        XCTAssertFalse(registry.revealNextCompleted())
         let newer = try finish("Newer", in: registry)
-        XCTAssertTrue(registry.revealNextCompleted())
         XCTAssertEqual(registry.revealedHistory.map(\.id), [newer, older])
         XCTAssertFalse(registry.revealNextCompleted())
+        registry.clearCompleted()
+        XCTAssertTrue(registry.revealNextCompleted())
+        XCTAssertEqual(registry.revealedHistory.map(\.id), [newer])
     }
 
     func testHistoryIsBoundedAndDoesNotUseActiveItemCapacity() throws {
@@ -109,12 +114,14 @@ final class ProgressCoreTests: XCTestCase {
         for index in 0..<50 {
             try registry.update(.init(name: "Running \(index)", progress: 10, etaSeconds: 60))
         }
-        XCTAssertTrue(registry.revealNextCompleted())
+        XCTAssertFalse(registry.revealNextCompleted())
         XCTAssertEqual(registry.revealedHistory.first?.id, newest)
         XCTAssertEqual(registry.items.count, 50)
         XCTAssertThrowsError(try registry.update(.init(name: "Overflow", progress: 10, etaSeconds: 60)))
         registry.clearCompleted()
         XCTAssertEqual(registry.items.count, 50)
+        XCTAssertTrue(registry.revealNextCompleted())
+        XCTAssertEqual(registry.revealedHistory.first?.id, newest)
     }
 
     private func finish(_ name: String, in registry: ProgressRegistry) throws -> UUID {

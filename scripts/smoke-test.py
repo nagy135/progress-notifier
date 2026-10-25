@@ -107,6 +107,7 @@ try:
     update(names[0], 100, 0)
     assert items()[0]["completing"] is True
     time.sleep(1.6)
+    # The active API entry retires; the completed card remains in visible history.
     assert not items()
     update(names[0], 100, 0)
     assert not items()

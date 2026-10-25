@@ -6,12 +6,13 @@ final class ProgressModel: ObservableObject {
     @Published private(set) var items: [ProgressItem] = []
     @Published private(set) var recalledItems: [ProgressItem] = []
     @Published var isFocused = false
-    var displayItems: [ProgressItem] { items + recalledItems }
+    var displayItems: [ProgressItem] { items.filter { !$0.completing } + recalledItems }
     var hasHistory: Bool { !registry.history.isEmpty }
     private let registry: ProgressRegistry
     private let stateURL: URL
     var changed: (() -> Void)?
     private var sound: NSSound?
+    private let completionFeedback: (() -> Void)?
     private var revisions: [UUID: UInt64] = [:]
     private var flashedRevisions: [UUID: UInt64] = [:]
 
@@ -25,7 +26,8 @@ final class ProgressModel: ObservableObject {
         return true
     }
 
-    init(stateURL: URL? = nil) {
+    init(stateURL: URL? = nil, completionFeedback: (() -> Void)? = nil) {
+        self.completionFeedback = completionFeedback
         self.stateURL = stateURL ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Progress Notifier/state.json")
         let snapshot = (try? Data(contentsOf: self.stateURL)).flatMap { try? JSONDecoder().decode(ProgressSnapshot.self, from: $0) }
@@ -56,7 +58,7 @@ final class ProgressModel: ObservableObject {
         // Standard clients encode query spaces as +; an actual plus arrives as %2B.
         url.percentEncodedQuery = url.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%20")
         if url.path == "/health", request.method == "GET" {
-            return HTTPResponse(["app": "progress-notifier", "version": "1.4.1", "status": "ok"])
+            return HTTPResponse(["app": "progress-notifier", "version": "1.4.2", "status": "ok"])
         }
         guard url.path == "/items" else { return HTTPResponse(404, ["error": "Unknown endpoint"]) }
         switch request.method {
@@ -101,8 +103,12 @@ final class ProgressModel: ObservableObject {
                 }
                 publish()
                 if completed, let item = items.first(where: { $0.name == update.name.trimmingCharacters(in: .whitespacesAndNewlines) }) {
-                    sound = NSSound(named: "Glass")
-                    if sound?.play() != true { NSSound.beep() }
+                    if let completionFeedback { completionFeedback() }
+                    else {
+                        sound = NSSound(named: "Glass")
+                        if sound?.play() != true { NSSound.beep() }
+                    }
+                    // Retire the API entry after feedback, while keeping the same visible history ID.
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.25) { [weak self] in
                         self?.registry.removeCompleted(id: item.id)
                         self?.publish()

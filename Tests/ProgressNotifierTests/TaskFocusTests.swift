@@ -92,4 +92,48 @@ final class TaskFocusTests: XCTestCase {
         XCTAssertEqual(presentation.focusedItemID, items[1].id)
         XCTAssertEqual(presentation.rows.map(\.historyHeight), [0, 0, 0])
     }
+
+    func testGlobalToggleOpensAllAndCollapsesOnlyWhenAllAreOpen() throws {
+        let items = try items()
+        let presentation = ProgressPresentation(compact: false)
+        presentation.update(items: items, compact: false, animated: false)
+        presentation.measureHistory(Dictionary(uniqueKeysWithValues: items.map { ($0.id, CGFloat(80)) }), animated: false)
+        presentation.toggleAllUpdates(animated: false)
+        XCTAssertEqual(presentation.rows.map(\.historyHeight), [80, 80, 80])
+        presentation.moveFocus(by: 1, animated: false)
+        XCTAssertEqual(presentation.rows.map(\.historyHeight), [80, 80, 80])
+        presentation.setShowsUpdates(false, animated: false)
+        XCTAssertEqual(presentation.rows.map(\.historyHeight), [80, 0, 80])
+        presentation.toggleAllUpdates(animated: false)
+        XCTAssertEqual(presentation.rows.map(\.historyHeight), [80, 80, 80])
+        presentation.toggleAllUpdates(animated: false)
+        XCTAssertEqual(presentation.rows.map(\.historyHeight), [0, 0, 0])
+        // After collapsing everything, D restores the single focused inspector.
+        presentation.setShowsUpdates(true, animated: false)
+        presentation.moveFocus(by: 1, animated: false)
+        XCTAssertEqual(presentation.rows.map(\.historyHeight), [0, 0, 80])
+    }
+
+    func testGlobalToggleUsesCurrentTasksAndIgnoresTasksWithoutEarlierNotes() throws {
+        var items = try items()
+        items[1].updates = Array(items[1].updates.prefix(1))
+        let presentation = ProgressPresentation(compact: true)
+        presentation.update(items: Array(items.prefix(2)), compact: true, animated: false)
+        presentation.measureHistory(Dictionary(uniqueKeysWithValues: items.map { ($0.id, CGFloat(80)) }), animated: false)
+        presentation.toggleAllUpdates(animated: false)
+        XCTAssertEqual(presentation.expandedItemIDs, [items[0].id])
+        presentation.update(items: items, compact: false, animated: false)
+        presentation.measureHistory([items[2].id: 80], animated: false)
+        XCTAssertEqual(presentation.rows.map(\.historyHeight), [80, 0, 0])
+        presentation.toggleAllUpdates(animated: false)
+        XCTAssertEqual(presentation.rows.map(\.historyHeight), [80, 0, 80])
+        presentation.update(items: Array(items.suffix(1)), compact: false, animated: false)
+        XCTAssertEqual(presentation.expandedItemIDs, [items[2].id])
+        presentation.toggleAllUpdates(animated: false)
+        XCTAssertTrue(presentation.expandedItemIDs.isEmpty)
+        presentation.update(items: [], compact: false, animated: false)
+        presentation.toggleAllUpdates(animated: false)
+        XCTAssertFalse(presentation.showsUpdates)
+        XCTAssertTrue(presentation.expandedItemIDs.isEmpty)
+    }
 }

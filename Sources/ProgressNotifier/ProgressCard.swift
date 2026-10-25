@@ -378,7 +378,7 @@ struct ProgressCard: View {
                                          dismiss: { model.dismiss(row.item) }, detailsHeight: row.detailsHeight,
                                          historyHeight: row.historyHeight,
                                          selected: presentation.focusedItemID == row.id, panelFocused: model.isFocused,
-                                         updatesUnfolded: presentation.showsUpdates && presentation.focusedItemID == row.id)
+                                         updatesUnfolded: presentation.showsUpdates(for: row.id))
                                     .frame(width: blend(144, Self.expandedRowWidth, expansion), alignment: .leading)
                                     .fixedSize(horizontal: false, vertical: true)
                                     .frame(height: presentation.rowHeight(row) * row.presence,

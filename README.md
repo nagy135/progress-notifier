@@ -80,10 +80,13 @@ new tasks keep the same selection; removing the focused task selects its next ne
 or the previous one when it was last.
 
 Each ledger row has a time column, description, recorded percentage, and proportional
-bar, with the newest update first. When the ledger is open, moving focus folds the old
-row and reveals the newly focused task's history. Other tasks stay folded. Keyboard
+bar, with the newest update first. **Shift+D** opens all tasks with earlier descriptions;
+when all are open, it folds them all. In this mode, D toggles only the selected task
+and moving focus preserves the other ledgers. If any are folded, Shift+D opens all again.
+With a single ledger opened using D, moving focus folds the old row and reveals the
+newly focused task's history. Keyboard
 navigation keeps the selected task in view. D from compact mode expands the panel and
-shows the focused ledger. M preserves selection and the ledger setting; D does not
+shows the focused ledger; Shift+D also expands compact mode and toggles all ledgers. M preserves selection and the ledger setting; D does not
 change H/C completed-task history. Update details start folded after relaunch.
 
 Each described update is a snapshot of the task's overall progress, not a separate

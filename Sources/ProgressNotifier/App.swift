@@ -84,7 +84,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             case "m": self.toggleCompact(); return nil
             case "h": self.recallCompleted(); return nil
             case "c": self.model.clearCompleted(); return nil
-            case "d": if !event.isARepeat { self.toggleUpdates() }; return nil
+            case "d":
+                if !event.isARepeat {
+                    if event.modifierFlags.contains(.shift) { self.toggleAllUpdates() }
+                    else { self.toggleUpdates() }
+                }
+                return nil
             default: return event
             }
         }
@@ -143,6 +148,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let updates = NSMenuItem(title: "Toggle Focused Task Details (D)", action: #selector(toggleUpdates), keyEquivalent: "")
         updates.target = self
         menu.addItem(updates)
+        let allUpdates = NSMenuItem(title: "Toggle All Task Details (Shift+D)", action: #selector(toggleAllUpdates), keyEquivalent: "")
+        allUpdates.target = self
+        menu.addItem(allUpdates)
         let recall = NSMenuItem(title: "Recall Completed Result (H)", action: #selector(recallCompleted), keyEquivalent: "")
         recall.target = self
         menu.addItem(recall)
@@ -163,6 +171,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         } else {
             presentation.setShowsUpdates(shown, animated: panel?.isVisible == true)
         }
+        refreshPanel()
+    }
+
+    @objc private func toggleAllUpdates() {
+        guard presentation.focusedItemID != nil else { return }
+        if compact {
+            compact = false
+            UserDefaults.standard.set(false, forKey: "compactMode")
+        }
+        presentation.toggleAllUpdates(animated: panel?.isVisible == true)
         refreshPanel()
     }
 

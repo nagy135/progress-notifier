@@ -8,6 +8,7 @@ final class ProgressPresentation: ObservableObject {
         var item: ProgressItem
         var presence: CGFloat
         var detailsHeight: CGFloat = 64
+        var historyHeight: CGFloat = 0
         var id: UUID { item.id }
     }
 
@@ -15,11 +16,14 @@ final class ProgressPresentation: ObservableObject {
     @Published private(set) var expansion: CGFloat
     @Published private(set) var rows: [Row] = []
     @Published private(set) var emptyPresence: CGFloat = 1
+    @Published private(set) var showsUpdates = false
+    @Published private(set) var updatesControlPresence: CGFloat = 0
     @Published var maximumHeight: CGFloat = 800
     var geometryChanged: (() -> Void)?
     private var desiredItems: [ProgressItem] = []
     private var targetExpansion: CGFloat
     private var measuredHeights: [UUID: CGFloat] = [:]
+    private var measuredHistoryHeights: [UUID: CGFloat] = [:]
     private var timer: Timer?
 
     init(compact: Bool) {
@@ -29,10 +33,10 @@ final class ProgressPresentation: ObservableObject {
 
     deinit { timer?.invalidate() }
 
-    var chromeHeight: CGFloat { 36 + 44 * expansion }
+    var chromeHeight: CGFloat { 36 + 44 * expansion + 30 * expansion * updatesControlPresence }
     var naturalContentHeight: CGFloat {
         let rowHeight = rows.reduce(CGFloat.zero) { total, row in
-            total + row.presence * (20 + (row.detailsHeight + 22) * expansion)
+            total + row.presence * (20 + (row.detailsHeight + 22 + row.historyHeight) * expansion)
         }
         return rowHeight + rows.indices.reduce(CGFloat.zero) { $0 + spacing(before: $1) }
             + 8 * expansion * (1 - emptyPresence)
@@ -73,6 +77,23 @@ final class ProgressPresentation: ObservableObject {
         animate(animated: animated)
     }
 
+    func setShowsUpdates(_ shown: Bool, animated: Bool) {
+        showsUpdates = shown
+        animate(animated: animated)
+    }
+
+    func measureHistory(_ heights: [UUID: CGFloat], animated: Bool) {
+        let ids = Set(rows.map(\.id))
+        let relevant = heights.filter { ids.contains($0.key) }
+        guard relevant.contains(where: { abs((measuredHistoryHeights[$0.key] ?? -1) - $0.value) > 0.5 }) else { return }
+        measuredHistoryHeights.merge(relevant, uniquingKeysWith: { _, new in new })
+        animate(animated: animated)
+    }
+
+    func rowHeight(_ row: Row) -> CGFloat {
+        20 + (row.detailsHeight + 22 + row.historyHeight) * expansion
+    }
+
     private func animate(animated: Bool) {
         timer?.invalidate()
         timer = nil
@@ -87,11 +108,14 @@ final class ProgressPresentation: ObservableObject {
         let startRows = rows
         let startExpansion = expansion
         let startEmpty = emptyPresence
+        let startControl = updatesControlPresence
+        let targetControl: CGFloat = desiredItems.contains(where: { !$0.updates.isEmpty }) ? 1 : 0
         let targetEmpty: CGFloat = desiredItems.isEmpty ? 1 : 0
         let targetRows = rows.map { row -> Row in
             var target = row
             target.presence = desiredIDs.contains(row.id) ? 1 : 0
             target.detailsHeight = measuredHeights[row.id] ?? row.detailsHeight
+            target.historyHeight = showsUpdates ? measuredHistoryHeights[row.id] ?? 0 : 0
             return target
         }
         let apply: (CGFloat) -> Void = { [weak self] fraction in
@@ -100,16 +124,19 @@ final class ProgressPresentation: ObservableObject {
             transaction.disablesAnimations = true
             withTransaction(transaction) {
                 self.expansion = startExpansion + (self.targetExpansion - startExpansion) * fraction
+                self.updatesControlPresence = startControl + (targetControl - startControl) * fraction
                 self.emptyPresence = startEmpty + (targetEmpty - startEmpty) * fraction
                 self.rows = zip(startRows, targetRows).map { start, target in
                     var row = target
                     row.presence = start.presence + (target.presence - start.presence) * fraction
+                    row.historyHeight = start.historyHeight + (target.historyHeight - start.historyHeight) * fraction
                     row.detailsHeight = start.detailsHeight + (target.detailsHeight - start.detailsHeight) * fraction
                     return row
                 }
                 if fraction == 1 {
                     self.rows.removeAll { !desiredIDs.contains($0.id) }
                     self.measuredHeights = self.measuredHeights.filter { desiredIDs.contains($0.key) }
+                    self.measuredHistoryHeights = self.measuredHistoryHeights.filter { desiredIDs.contains($0.key) }
                 }
                 self.geometryChanged?()
             }
@@ -119,9 +146,9 @@ final class ProgressPresentation: ObservableObject {
         guard rows.allSatisfy({ $0.presence > 0 || measuredHeights[$0.id] != nil || !desiredIDs.contains($0.id) }) else {
             return
         }
-        let needsAnimation = startExpansion != targetExpansion || startEmpty != targetEmpty
+        let needsAnimation = startExpansion != targetExpansion || startEmpty != targetEmpty || startControl != targetControl
             || zip(startRows, targetRows).contains { abs($0.presence - $1.presence) > 0.001
-                || abs($0.detailsHeight - $1.detailsHeight) > 0.5 }
+                || abs($0.detailsHeight - $1.detailsHeight) > 0.5 || abs($0.historyHeight - $1.historyHeight) > 0.5 }
         guard needsAnimation else { apply(1); return }
         let startedAt = ProcessInfo.processInfo.systemUptime
         let timer = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] timer in

@@ -51,11 +51,43 @@ The three fields are required:
 | `progress` | A number from 0 to 100, including fractions. |
 | `etaSeconds` | Estimated seconds **remaining now**, from 0 to 31536000. Each update replaces the estimate. |
 
-Optional fields are `project` (up to 160 characters) and `projectIcon` (a T3 icon object). Omitted or null metadata stays unchanged on an existing item. Send `project: ""` to clear both. Metadata is saved across relaunches and returned by `GET /items` when present. The item name remains its stable identity; a project heading does not rename it.
+Optional fields are `description` (up to 2,000 characters, with newlines and tabs allowed), `project` (up to 160 characters) and `projectIcon` (a T3 icon object). Omitted or null metadata stays unchanged on an existing item. Send `project: ""` to clear both. Metadata is saved across relaunches and returned by `GET /items` when present. The item name remains its stable identity; a project heading does not rename it.
 
 Expanded items show their first-added age beside the ETA on the same line, for example “About 4m left · Added 47 seconds ago”. The age refreshes every second and survives progress updates and relaunches. Older saved items without a creation time say “Added earlier”. The ETA counts down independently of progress. Expired estimates say “Finishing soon”; only a client can mark an item complete. Each accepted update briefly flashes and scales its card, including ETA-only and repeated progress values; compact bars flash individually. At 100%, an existing item flashes green, scales up, plays the macOS Glass sound, and disappears after 1.25 seconds. Reduce Motion disables the scale effect. Repeated completion requests do not replay the effect or sound. Unknown completions do not create cards.
 
 Click an item's X to dismiss it. Updates for that name stay silent until its client sends 100%; the name is then available for a new run. Dismissal does not cancel the client's actual work. When the last card disappears, the window stays visible with “No progress” (unless you hid it). Items and dismissals are saved to `~/Library/Application Support/Progress Notifier/state.json` and restored after relaunch. The latest 200 completed results are saved as history and stay hidden on launch. Press H while the panel has focus to bring back one completed result at a time, newest first; recalling expands the panel and does not replay the sound or flash. Press C to hide all completed results, including any still finishing, without affecting active work or deleting history. H then starts from the newest result again. Each recalled result stays visible until cleared or dismissed with its X. History actions are also available in the menu bar menu. History starts with completions recorded by this version; older discarded results cannot be recovered. Compact mode is also remembered.
+
+Send a short description of what just happened with a progress update:
+
+```sh
+./scripts/progress-notify 'Build release' 25 120 --project 'progress-notifier' \
+  --description 'Compiled the app and bundled resources'
+./scripts/progress-notify 'Build release' 75 30 \
+  --description 'Passed the test suite; checking the installed app'
+```
+
+The default card shows the latest description, its timestamp, current progress, and the
+number of saved updates. Press **D** while the panel has focus, or click **Show updates**,
+to unfold the ledger on every task. Each row has a time column, description, recorded
+percentage, and proportional bar, with the newest update first. D from compact mode
+expands the panel and shows the ledger. M preserves the current ledger setting; D does
+not change H/C completed-task history. Update details start folded after relaunch.
+
+Each described update is a snapshot of the task's overall progress, not a separate
+subtask. The latest 200 snapshots per task are saved across relaunches and completed-task
+recall. Counts include the latest entry and reflect retained entries. New updates are
+ordered by server receipt, including when percentages decrease or timestamps tie.
+Consecutive identical description/percentage pairs do not add duplicate entries or
+change the original timestamp; ETA updates still apply. Omitted, null, or blank
+descriptions append nothing and preserve existing notes. Old clients keep updating
+live progress; if it differs from the last note's recorded percentage, the card labels
+and displays both meters separately. Description text is trimmed, line endings are
+normalized, and invalid descriptions are rejected before changing the task.
+
+`GET /items` includes `description` when a latest note exists, `updateCount`, and an
+`updates` array in newest-first order. Each update has `id`, `description`, `progress`,
+and `recordedAt` (server-generated ISO 8601 timestamp). These are distinct from the
+existing completed-task history; recalled completed tasks remain excluded from this API.
 
 The client **never starts the app**. When the app is stopped or unavailable, calls silently succeed without sending or queuing updates. Use `--require-running` for explicit diagnostics; `--no-launch` remains an alias for this strict mode.
 
@@ -67,7 +99,7 @@ The listener binds **only to IPv4 loopback `127.0.0.1:8766`**, using Apple's [Ne
 | --- | --- |
 | `GET /health` | App name, version, and status. |
 | `POST /items` | Create/update an item; returns `{"ok":true}`. Requires `Content-Type: application/json`. |
-| `GET /items` | `{"items":[{"name":"Build release","progress":45,"etaSeconds":89.2,"completing":false}]}` |
+| `GET /items` | `{"items":[{"name":"Build release","progress":45,"etaSeconds":89.2,"completing":false,"updateCount":0,"updates":[]}]}` |
 | `DELETE /items?name=Build%20release` | Dismiss an item without a success sound. Idempotent. |
 
 `GET /items` returns current tasks, including their brief completion animation; recalled history is display-only and does not appear in the API or interfere with a new task using the same name.

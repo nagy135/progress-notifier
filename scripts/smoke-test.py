@@ -43,7 +43,7 @@ def dismiss(name):
 try:
     assert call("/health")["app"] == "progress-notifier"
     icon = {"kind": "lucide", "name": "snowflake", "color": "blue"}
-    update(names[0], 0, 120, project="progress-notifier")
+    update(names[0], 0, 120, project="progress-notifier", description="Prepared build inputs")
     update(names[1], 10, 90, project="nix-darwin", projectIcon=icon)
     assert len(items()) == 2
     with ThreadPoolExecutor(max_workers=2) as pool:
@@ -51,13 +51,23 @@ try:
     assert all(item["progress"] == 42 and 55 <= item["etaSeconds"] <= 60 for item in items())
     assert items()[0]["project"] == "progress-notifier"
     assert items()[1]["projectIcon"] == icon
+    update(names[0], 42, 60, description="Compiled the app")
+    first = next(item for item in items() if item["name"] == names[0])
+    assert first["updateCount"] == 2
+    assert [entry["progress"] for entry in first["updates"]] == [42, 0]
+    assert first["description"] == "Compiled the app"
+    original = first["updates"][0]
+    update(names[0], 42, 55, description="Compiled the app")
+    first = next(item for item in items() if item["name"] == names[0])
+    assert first["updateCount"] == 2 and first["updates"][0] == original
+    assert items()[1]["updates"] == []  # Legacy client creates no note history.
     update(names[1], 42, 45)  # ETA-only updates keep the icon and trigger a new pulse.
     assert items()[1]["projectIcon"] == icon
 
     call("/items", "POST", b'{"name":"bad","progress":101,"etaSeconds":0}',
          {"Content-Type": "application/json"}, status=400)
     call("/items", "POST", b'{}', {"Content-Type": "application/json"}, status=400)
-    for metadata in [{"project": 42}, {"projectIcon": "snowflake"},
+    for metadata in [{"description": 42}, {"description": "x" * 2001}, {"description": "bad\x00text"}, {"project": 42}, {"projectIcon": "snowflake"},
                      {"projectIcon": {"kind": "lucide", "name": "../file", "color": "blue"}},
                      {"projectIcon": {"kind": "emoji", "emoji": ""}}]:
         body = {"name": names[0], "progress": 42, "etaSeconds": 30, **metadata}
@@ -100,7 +110,7 @@ try:
     assert not items()
     update(names[0], 100, 0)
     assert not items()
-    print("PASS: live API, project metadata/icons, legacy and ETA-only updates, validation, fragmented HTTP, dismissal, and completion")
+    print("PASS: live API, descriptions, snapshot order/retries, legacy clients, metadata, validation, fragmented HTTP, dismissal, and completion")
 finally:
     for name in names:
         try:

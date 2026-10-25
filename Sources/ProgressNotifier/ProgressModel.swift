@@ -25,10 +25,10 @@ final class ProgressModel: ObservableObject {
         return true
     }
 
-    init() {
-        stateURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+    init(stateURL: URL? = nil) {
+        self.stateURL = stateURL ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Progress Notifier/state.json")
-        let snapshot = (try? Data(contentsOf: stateURL)).flatMap { try? JSONDecoder().decode(ProgressSnapshot.self, from: $0) }
+        let snapshot = (try? Data(contentsOf: self.stateURL)).flatMap { try? JSONDecoder().decode(ProgressSnapshot.self, from: $0) }
         registry = ProgressRegistry(snapshot: snapshot)
         items = registry.items
     }
@@ -56,14 +56,22 @@ final class ProgressModel: ObservableObject {
         // Standard clients encode query spaces as +; an actual plus arrives as %2B.
         url.percentEncodedQuery = url.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%20")
         if url.path == "/health", request.method == "GET" {
-            return HTTPResponse(["app": "progress-notifier", "version": "1.2.0", "status": "ok"])
+            return HTTPResponse(["app": "progress-notifier", "version": "1.3.0", "status": "ok"])
         }
         guard url.path == "/items" else { return HTTPResponse(404, ["error": "Unknown endpoint"]) }
         switch request.method {
         case "GET":
+            let timestamp = ISO8601DateFormatter()
+            timestamp.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
             let data: [[String: Any]] = items.map {
                 var value: [String: Any] = ["name": $0.name, "progress": $0.progress,
                     "etaSeconds": max(0, $0.expectedFinish.timeIntervalSinceNow), "completing": $0.completing]
+                value["updates"] = $0.updates.map { entry -> [String: Any] in
+                    ["id": entry.id.uuidString, "description": entry.description,
+                     "progress": entry.progress, "recordedAt": timestamp.string(from: entry.recordedAt)]
+                }
+                value["updateCount"] = $0.updates.count
+                if let latest = $0.updates.first { value["description"] = latest.description }
                 if let project = $0.project { value["project"] = project }
                 if let icon = $0.projectIcon,
                    let data = try? JSONEncoder().encode(icon),
@@ -84,7 +92,7 @@ final class ProgressModel: ObservableObject {
             do {
                 let update: ProgressUpdate
                 do { update = try JSONDecoder().decode(ProgressUpdate.self, from: request.body) }
-                catch { throw APIError(400, "Expected JSON: name (string), progress (0–100), etaSeconds (seconds remaining); optional project must be a string and projectIcon must be a T3 project icon object") }
+                catch { throw APIError(400, "Expected JSON: name (string), progress (0–100), etaSeconds (seconds remaining); optional description and project must be strings and projectIcon must be a T3 project icon object") }
                 let name = update.name.trimmingCharacters(in: .whitespacesAndNewlines)
                 let wasCompleting = registry.items.first(where: { $0.name == name })?.completing ?? false
                 let completed = try registry.update(update)

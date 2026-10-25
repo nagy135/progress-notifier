@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import ProgressCore
 
@@ -112,6 +113,71 @@ private struct ItemDetailsHeightsKey: PreferenceKey {
     }
 }
 
+private struct ItemHistoryHeightsKey: PreferenceKey {
+    static var defaultValue: [UUID: CGFloat] = [:]
+    static func reduce(value: inout [UUID: CGFloat], nextValue: () -> [UUID: CGFloat]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
+    }
+}
+
+private func updateAge(_ date: Date, now: Date) -> String {
+    let seconds = max(0, Int(now.timeIntervalSince(date)))
+    if seconds < 60 { return "Now" }
+    if seconds < 3600 { return "\(seconds / 60)m" }
+    if seconds < 86400 { return "\(seconds / 3600)h" }
+    return "\(seconds / 86400)d"
+}
+
+private struct SnapshotMeter: View {
+    let progress: Double
+    var current = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            GeometryReader { proxy in
+                Capsule().fill(Color.mint.opacity(0.13))
+                    .overlay(alignment: .leading) {
+                        Capsule().fill(Color.mint.opacity(current ? 1 : 0.55))
+                            .frame(width: proxy.size.width * progress / 100)
+                    }
+            }.frame(height: 4)
+            Text("\(progress, specifier: "%.0f")%")
+                .font(.system(size: 11, weight: .medium)).monospacedDigit()
+                .foregroundStyle(Color.mint.opacity(current ? 1 : 0.7))
+                .frame(width: 34, alignment: .trailing)
+        }
+        .frame(height: 14)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Recorded progress")
+        .accessibilityValue("\(Int(progress.rounded())) percent")
+    }
+}
+
+private struct SnapshotRow: View {
+    let entry: ProgressEntry
+    let now: Date
+    var latest = false
+    var showMeter = true
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text(updateAge(entry.recordedAt, now: now))
+                .font(.system(size: 9, weight: latest ? .medium : .regular)).monospacedDigit()
+                .foregroundStyle(latest ? Color.mint : Color.secondary)
+                .frame(width: 30, alignment: .leading).padding(.top, 2)
+                .help(entry.recordedAt.formatted(date: .abbreviated, time: .standard))
+            VStack(alignment: .leading, spacing: 7) {
+                Text(entry.description).font(.system(size: 12))
+                    .foregroundStyle(latest ? Color.primary : Color.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if showMeter { SnapshotMeter(progress: entry.progress, current: latest) }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
+}
+
 private struct ItemCard: View {
     let item: ProgressItem
     let revision: UInt64
@@ -120,6 +186,7 @@ private struct ItemCard: View {
     let expansion: CGFloat
     let dismiss: () -> Void
     let detailsHeight: CGFloat
+    let historyHeight: CGFloat
 
     private var tint: Color { item.completing ? .green : Color(red: 0.23, green: 0.72, blue: 0.64) }
     private var detailOpacity: Double { Double(max(0, (expansion - 0.25) / 0.75)) }
@@ -127,6 +194,9 @@ private struct ItemCard: View {
         let estimate = item.completing ? "Complete" : remaining(item.expectedFinish.timeIntervalSince(now))
         return "\(estimate) · \(added(item.createdAt, now: now))"
     }
+
+    private var latest: ProgressEntry? { item.updates.first }
+    private var noteMatchesProgress: Bool { latest?.progress == item.progress }
 
     private var details: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -136,31 +206,59 @@ private struct ItemCard: View {
                     .frame(height: 16).padding(.leading, 22)
             }
             Text(item.name).font(.system(size: 13, weight: .semibold))
-                .lineLimit(2).help(item.name)
-            Text(timing)
-                .font(.system(size: 11)).foregroundStyle(.secondary)
-                .monospacedDigit().lineLimit(1).minimumScaleFactor(0.85)
-                .help(timing)
+                .lineLimit(2).help(item.name).padding(.trailing, 30)
+                .padding(.leading, item.project == nil ? 22 : 0)
+            HStack(spacing: 4) {
+                Text(timing).lineLimit(1).minimumScaleFactor(0.8).help(timing)
+                if !item.updates.isEmpty {
+                    Spacer(minLength: 4)
+                    Label(item.updates.count == 1 ? "1 update" : "\(item.updates.count) updates", systemImage: "text.alignleft")
+                        .font(.system(size: 10)).fixedSize()
+                }
+            }
+            .font(.system(size: latest == nil ? 11 : 10)).foregroundStyle(.secondary).monospacedDigit()
+            .padding(.leading, item.project == nil && latest == nil ? 22 : 0)
+            if let latest {
+                SnapshotRow(entry: latest, now: now, latest: true, showMeter: !noteMatchesProgress)
+                    .padding(.top, 8)
+                if !noteMatchesProgress {
+                    Text("Current progress · last note at \(latest.progress, specifier: "%.0f")%")
+                        .font(.system(size: 9)).foregroundStyle(.secondary).padding(.top, 5)
+                }
+            }
         }
-        .padding(.leading, item.project == nil ? 22 : 0)
-        .padding(.trailing, 30)
-        // Measure at expanded width even while collapsed: text never rewraps mid-resize.
-        .frame(width: 290, alignment: .leading)
+        // All measurements use the final text width, even while the panel is compact.
+        .frame(width: ProgressCard.detailsWidth, alignment: .leading)
         .fixedSize(horizontal: false, vertical: true)
         .background(GeometryReader { proxy in
             Color.clear.preference(key: ItemDetailsHeightsKey.self, value: [item.id: proxy.size.height])
         })
     }
 
+    private var earlierUpdates: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(item.updates.dropFirst()) { entry in
+                Divider().padding(.vertical, 10)
+                SnapshotRow(entry: entry, now: now)
+            }
+        }
+        .frame(width: ProgressCard.detailsWidth, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
+        .background(GeometryReader { proxy in
+            Color.clear.preference(key: ItemHistoryHeightsKey.self, value: [item.id: proxy.size.height])
+        })
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 8 * expansion) {
+        VStack(alignment: .leading, spacing: 0) {
             details
                 .frame(width: 0, height: detailsHeight * expansion, alignment: .topLeading)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .opacity(detailOpacity).clipped()
                 .accessibilityHidden(expansion < 0.5)
+                .padding(.bottom, 8 * expansion)
             HStack(spacing: 0) {
-                Color.clear.frame(width: 22 * (1 - expansion), height: 1)
+                Color.clear.frame(width: blend(22, latest == nil || !noteMatchesProgress ? 0 : 38, expansion), height: 1)
                 ItemProgressBar(item: item)
                 Text("\(item.progress, specifier: "%.0f")%")
                     .font(.system(size: 13, weight: .semibold, design: .rounded))
@@ -171,6 +269,12 @@ private struct ItemCard: View {
                     .accessibilityHidden(expansion < 0.5)
             }
             .frame(height: blend(ProgressCard.compactRowHeight, 16, expansion))
+            earlierUpdates
+                .frame(width: 0, height: historyHeight * expansion, alignment: .topLeading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .opacity(detailOpacity).clipped()
+                .accessibilityElement(children: historyHeight < 0.5 ? .ignore : .contain)
+                .accessibilityHidden(historyHeight < 0.5 || expansion < 0.5)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 12 * expansion)
@@ -204,10 +308,16 @@ private struct ItemCard: View {
 struct ProgressCard: View {
     static let compactRowHeight: CGFloat = 20
     static let compactRowSpacing: CGFloat = 2
+    // Reserve the native legacy scroller gutter even before overflow, so descriptions
+    // never rewrap and historical percentages never clip when macOS shows the scroller.
+    static let expandedRowWidth: CGFloat = 314 - NSScroller.scrollerWidth(for: .regular, scrollerStyle: .legacy)
+    static let detailsWidth: CGFloat = expandedRowWidth - 24
 
     @ObservedObject var model: ProgressModel
     @ObservedObject var presentation: ProgressPresentation
     let detailsHeightsChanged: ([UUID: CGFloat]) -> Void
+    let historyHeightsChanged: ([UUID: CGFloat]) -> Void
+    let toggleUpdates: () -> Void
     let toggleCompact: () -> Void
     let close: () -> Void
     @State private var buttonFrames: [CGRect] = []
@@ -236,14 +346,16 @@ struct ProgressCard: View {
 
             ScrollView(.vertical, showsIndicators: presentation.needsScrolling) {
                 TimelineView(.periodic(from: .now, by: 1)) { context in
-                    VStack(spacing: 0) {
+                    VStack(alignment: .leading, spacing: 0) {
                         ForEach(Array(presentation.rows.enumerated()), id: \.element.id) { index, row in
                             ItemCard(item: row.item, revision: model.revision(for: row.item),
                                      consumeUpdatePulse: { model.consumeUpdatePulse(for: row.item) },
                                      now: context.date, expansion: expansion,
-                                     dismiss: { model.dismiss(row.item) }, detailsHeight: row.detailsHeight)
+                                     dismiss: { model.dismiss(row.item) }, detailsHeight: row.detailsHeight,
+                                     historyHeight: row.historyHeight)
+                                .frame(width: blend(144, Self.expandedRowWidth, expansion), alignment: .leading)
                                 .fixedSize(horizontal: false, vertical: true)
-                                .frame(height: (20 + (row.detailsHeight + 22) * expansion) * row.presence,
+                                .frame(height: presentation.rowHeight(row) * row.presence,
                                        alignment: .top)
                                 .opacity(Double(row.presence)).clipped()
                                 .allowsHitTesting(row.presence > 0.95)
@@ -257,6 +369,7 @@ struct ProgressCard: View {
                             .opacity(Double(presentation.emptyPresence)).clipped()
                             .accessibilityHidden(presentation.emptyPresence < 0.5)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.vertical, 4 * expansion * (1 - presentation.emptyPresence))
                     .padding(.horizontal, 4 * expansion)
                     .frame(height: presentation.naturalContentHeight, alignment: .top)
@@ -267,6 +380,26 @@ struct ProgressCard: View {
             .frame(height: presentation.contentHeight, alignment: .top)
             .clipped()
 
+            HStack {
+                Button(action: toggleUpdates) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "clock.arrow.circlepath")
+                        Text(presentation.showsUpdates ? "Hide earlier updates" : "Show updates")
+                        Text("D").font(.system(size: 9)).padding(.horizontal, 4).padding(.vertical, 1)
+                            .background(.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 3))
+                    }
+                }
+                .buttonStyle(.plain).modifier(ExcludeFromToggle())
+                .accessibilityLabel(presentation.showsUpdates ? "Hide earlier updates for all tasks" : "Show updates for all tasks")
+                .help("Toggle description history for all tasks (D)")
+                Spacer()
+                Text("Newest first").font(.system(size: 9))
+            }
+            .font(.system(size: 11)).foregroundStyle(.secondary)
+            .frame(height: 30 * expansion * presentation.updatesControlPresence, alignment: .bottom)
+            .opacity(Double(expansion * presentation.updatesControlPresence)).clipped()
+            .allowsHitTesting(expansion > 0.95 && presentation.updatesControlPresence > 0.95)
+            .accessibilityHidden(expansion < 0.5 || presentation.updatesControlPresence < 0.5)
         }
         .padding(.horizontal, Self.horizontalInset(expansion: expansion))
         .padding(.vertical, Self.verticalInset(expansion: expansion))
@@ -297,6 +430,9 @@ struct ProgressCard: View {
         .onPreferenceChange(ButtonFramesKey.self) { buttonFrames = $0 }
         .onPreferenceChange(ItemDetailsHeightsKey.self) { heights in
             DispatchQueue.main.async { detailsHeightsChanged(heights) }
+        }
+        .onPreferenceChange(ItemHistoryHeightsKey.self) { heights in
+            DispatchQueue.main.async { historyHeightsChanged(heights) }
         }
         .contentShape(Rectangle())
         .simultaneousGesture(SpatialTapGesture().onEnded { value in

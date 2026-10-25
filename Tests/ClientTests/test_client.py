@@ -58,3 +58,17 @@ class ClientTests(unittest.TestCase):
             with self.assertRaises(SystemExit) as error:
                 self.invoke(["Build", "40", "90", "--project-icon", icon])
             self.assertEqual(error.exception.code, 2)
+
+    def testDescriptionIsNormalizedAndSentWithItsPercentage(self):
+        code, _, err, request = self.invoke(["Build", "40", "90", "--description", "  Compiled\r\nTests next  "], result={"ok": True})
+        self.assertEqual((code, err), (0, ""))
+        request.assert_called_once_with("/items", "POST", {"name": "Build", "progress": 40, "etaSeconds": 90,
+                                                         "description": "Compiled\nTests next"})
+
+    def testInvalidDescriptionsAndCommandCombinationsAreRejected(self):
+        for args in [["Build", "40", "90", "--description", "x" * 2001],
+                     ["Build", "40", "90", "--description", "Bad\x00text"],
+                     ["--list", "--description", "Note"]]:
+            with self.assertRaises(SystemExit) as error:
+                self.invoke(args)
+            self.assertEqual(error.exception.code, 2)

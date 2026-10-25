@@ -76,6 +76,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             case "m": self.toggleCompact(); return nil
             case "h": self.recallCompleted(); return nil
             case "c": self.model.clearCompleted(); return nil
+            case "d": if !event.isARepeat { self.toggleUpdates() }; return nil
             default: return event
             }
         }
@@ -128,6 +129,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private func addHistoryActions(to menu: NSMenu) {
         menu.addItem(.separator())
+        let updates = NSMenuItem(title: "Toggle Update Details (D)", action: #selector(toggleUpdates), keyEquivalent: "")
+        updates.target = self
+        menu.addItem(updates)
         let recall = NSMenuItem(title: "Recall Completed Result (H)", action: #selector(recallCompleted), keyEquivalent: "")
         recall.target = self
         menu.addItem(recall)
@@ -135,6 +139,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         clear.target = self
         menu.addItem(clear)
         menu.addItem(.separator())
+    }
+
+    @objc private func toggleUpdates() {
+        let shown = !presentation.showsUpdates
+        if compact {
+            compact = false
+            UserDefaults.standard.set(false, forKey: "compactMode")
+            // D from compact opens the ledger; further presses only fold its history.
+            presentation.setShowsUpdates(true, animated: panel?.isVisible == true)
+        } else {
+            presentation.setShowsUpdates(shown, animated: panel?.isVisible == true)
+        }
+        refreshPanel()
     }
 
     @objc private func recallCompleted() {
@@ -158,6 +175,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                                         guard let self else { return }
                                         self.presentation.measure(heights, animated: self.panel?.isVisible == true)
                                     },
+                                    historyHeightsChanged: { [weak self] heights in
+                                        guard let self else { return }
+                                        self.presentation.measureHistory(heights, animated: self.panel?.isVisible == true)
+                                    },
+                                    toggleUpdates: { [weak self] in self?.toggleUpdates() },
                                     toggleCompact: { [weak self] in self?.toggleCompact() },
                                     close: { [weak self] in self?.hideProgress() })
             let hosting = NSHostingView(rootView: PanelContent { root })

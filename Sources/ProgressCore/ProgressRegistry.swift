@@ -6,13 +6,15 @@ public struct ProgressUpdate: Codable {
     public let etaSeconds: Double
     public let project: String?
     public let projectIcon: ProjectIcon?
+    public let description: String?
 
-    public init(name: String, progress: Double, etaSeconds: Double, project: String? = nil, projectIcon: ProjectIcon? = nil) {
+    public init(name: String, progress: Double, etaSeconds: Double, project: String? = nil, projectIcon: ProjectIcon? = nil, description: String? = nil) {
         self.name = name
         self.progress = progress
         self.etaSeconds = etaSeconds
         self.project = project
         self.projectIcon = projectIcon
+        self.description = description
     }
 
     public func validated() throws -> ProgressUpdate {
@@ -29,7 +31,23 @@ public struct ProgressUpdate: Codable {
         }
         return ProgressUpdate(name: name, progress: progress, etaSeconds: etaSeconds,
                               project: try Self.metadata(project, field: "project", limit: 160),
-                              projectIcon: try projectIcon?.validated())
+                              projectIcon: try projectIcon?.validated(),
+                              description: try Self.normalizedDescription(description))
+    }
+
+    public static let descriptionLimit = 2_000
+
+    public static func normalizedDescription(_ input: String?) throws -> String? {
+        guard let input else { return nil }
+        let value = input.replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard value.count <= descriptionLimit,
+              !value.unicodeScalars.contains(where: {
+                  CharacterSet.controlCharacters.contains($0) && $0 != "\n" && $0 != "\t"
+              }) else {
+            throw APIError(400, "description must contain at most 2000 characters; only newline and tab control characters are supported")
+        }
+        return value.isEmpty ? nil : value
     }
 
     private static func metadata(_ input: String?, field: String, limit: Int) throws -> String? {
@@ -43,6 +61,13 @@ public struct ProgressUpdate: Codable {
     }
 }
 
+public struct ProgressEntry: Codable, Identifiable {
+    public let id: UUID
+    public let description: String
+    public let progress: Double
+    public let recordedAt: Date
+}
+
 public struct ProgressItem: Codable, Identifiable {
     public let id: UUID
     public let name: String
@@ -54,6 +79,28 @@ public struct ProgressItem: Codable, Identifiable {
     public var completing: Bool
     public var project: String?
     public var projectIcon: ProjectIcon?
+    public var updates: [ProgressEntry] = []
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, createdAt, completedAt, progress, expectedFinish, completing, project, projectIcon, updates
+    }
+
+}
+
+extension ProgressItem {
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(UUID.self, forKey: .id)
+        name = try values.decode(String.self, forKey: .name)
+        createdAt = try values.decodeIfPresent(Date.self, forKey: .createdAt)
+        completedAt = try values.decodeIfPresent(Date.self, forKey: .completedAt)
+        progress = try values.decode(Double.self, forKey: .progress)
+        expectedFinish = try values.decode(Date.self, forKey: .expectedFinish)
+        completing = try values.decode(Bool.self, forKey: .completing)
+        project = try values.decodeIfPresent(String.self, forKey: .project)
+        projectIcon = try values.decodeIfPresent(ProjectIcon.self, forKey: .projectIcon)
+        updates = try values.decodeIfPresent([ProgressEntry].self, forKey: .updates) ?? []
+    }
 }
 
 public struct APIError: Error {
@@ -70,6 +117,7 @@ public struct ProgressSnapshot: Codable {
 
 /// Accessed on the main queue. Dismissed names stay silent until their client sends 100%.
 public final class ProgressRegistry {
+    public static let updateLimit = 200
     public static let historyLimit = 200
     public private(set) var items: [ProgressItem] = []
     public private(set) var history: [ProgressItem] = []
@@ -103,6 +151,14 @@ public final class ProgressRegistry {
         var restored = item
         restored.project = value.project.flatMap { $0.isEmpty ? nil : $0 }
         restored.projectIcon = value.projectIcon
+        var ids = Set<UUID>()
+        restored.updates = item.updates.compactMap { entry in
+            guard entry.progress.isFinite, (0...100).contains(entry.progress),
+                  entry.recordedAt.timeIntervalSince1970.isFinite,
+                  let text = try? ProgressUpdate.normalizedDescription(entry.description),
+                  ids.insert(entry.id).inserted else { return nil }
+            return ProgressEntry(id: entry.id, description: text, progress: entry.progress, recordedAt: entry.recordedAt)
+        }.prefix(updateLimit).map { $0 }
         return restored
     }
 
@@ -149,6 +205,7 @@ public final class ProgressRegistry {
             if let project = value.project { items[index].project = project.isEmpty ? nil : project }
             if let projectIcon = value.projectIcon { items[index].projectIcon = projectIcon }
             if value.project?.isEmpty == true { items[index].projectIcon = nil }
+            Self.record(value.description, progress: value.progress, on: &items[index], now: now)
             if items[index].completing {
                 items[index].completedAt = now
                 history.insert(items[index], at: 0)
@@ -166,7 +223,16 @@ public final class ProgressRegistry {
                                   expectedFinish: now.addingTimeInterval(value.etaSeconds), completing: false,
                                   project: value.project.flatMap { $0.isEmpty ? nil : $0 },
                                   projectIcon: value.projectIcon))
+        Self.record(value.description, progress: value.progress, on: &items[items.count - 1], now: now)
         return false
+    }
+
+    private static func record(_ description: String?, progress: Double, on item: inout ProgressItem, now: Date) {
+        guard let description else { return }
+        if let latest = item.updates.first, latest.description == description, latest.progress == progress { return }
+        // Receipt order is authoritative, including equal timestamps and regressing percentages.
+        item.updates.insert(ProgressEntry(id: UUID(), description: description, progress: progress, recordedAt: now), at: 0)
+        item.updates = Array(item.updates.prefix(updateLimit))
     }
 
     public func dismiss(name: String) {

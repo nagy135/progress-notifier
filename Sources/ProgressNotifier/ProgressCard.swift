@@ -177,7 +177,7 @@ private struct ItemCard: View {
                     .opacity(detailOpacity).clipped()
                     .accessibilityHidden(expansion < 0.5)
             }
-            .frame(height: blend(24, 16, expansion))
+            .frame(height: blend(ProgressCard.compactRowHeight, 16, expansion))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 12 * expansion)
@@ -185,7 +185,7 @@ private struct ItemCard: View {
         .overlay(alignment: .topLeading) {
             ProjectIconView(project: item.project ?? item.name, icon: item.projectIcon)
                 .padding(.leading, 12 * expansion)
-                .padding(.top, blend(4, 9, expansion))
+                .padding(.top, blend((ProgressCard.compactRowHeight - 16) / 2, 9, expansion))
                 .allowsHitTesting(false)
         }
         .overlay(alignment: .topTrailing) {
@@ -214,6 +214,8 @@ private struct ItemCard: View {
 struct ProgressCard: View {
     static let transitionDuration: TimeInterval = 0.16
     static let expandedChromeHeight: CGFloat = 80
+    static let compactRowHeight: CGFloat = 20
+    static let compactRowSpacing: CGFloat = 2
 
     @ObservedObject var model: ProgressModel
     @ObservedObject var presentation: ProgressPresentation
@@ -228,16 +230,16 @@ struct ProgressCard: View {
     private var runningCount: Int { model.items.filter { !$0.completing }.count }
 
     static func horizontalInset(expansion: CGFloat) -> CGFloat { blend(12, 14, expansion) }
-    static func verticalInset(expansion: CGFloat) -> CGFloat { blend(2, 14, expansion) }
+    static func verticalInset(expansion: CGFloat) -> CGFloat { blend(8, 14, expansion) }
 
     static func compactContentHeight(itemCount: Int) -> CGFloat {
-        max(24, CGFloat(itemCount) * 28 - 4)
+        max(compactRowHeight, CGFloat(itemCount) * (compactRowHeight + compactRowSpacing) - compactRowSpacing)
     }
 
     static func contentHeight(itemCount: Int, expandedContentHeight: CGFloat?,
                               maximumHeight: CGFloat, expansion: CGFloat) -> CGFloat {
         let expanded = itemCount == 0 ? 100 : expandedContentHeight ?? CGFloat(itemCount) * 100 + 8
-        return blend(min(compactContentHeight(itemCount: itemCount), maximumHeight - 24),
+        return blend(min(compactContentHeight(itemCount: itemCount), maximumHeight - 36),
                      min(expanded, maximumHeight - expandedChromeHeight), expansion)
     }
 
@@ -280,7 +282,7 @@ struct ProgressCard: View {
                 } else {
                     ScrollView {
                         TimelineView(.periodic(from: .now, by: 1)) { context in
-                            VStack(spacing: blend(4, 6, expansion)) {
+                            VStack(spacing: blend(Self.compactRowSpacing, 6, expansion)) {
                                 ForEach(model.displayItems) { item in
                                     ItemCard(item: item, revision: model.revision(for: item),
                                              consumeUpdatePulse: { model.consumeUpdatePulse(for: item) },
@@ -319,7 +321,9 @@ struct ProgressCard: View {
             .accessibilityLabel("Close progress window")
             .modifier(ExcludeFromToggle())
             .padding(.horizontal, Self.horizontalInset(expansion: expansion))
-            .padding(.vertical, Self.verticalInset(expansion: expansion))
+            // Keep the X centered on the first compact row despite its larger hit area.
+            .padding(.top, Self.verticalInset(expansion: expansion)
+                     + (Self.compactRowHeight - 24) / 2 * (1 - expansion))
         }
         .padding(10)
         .coordinateSpace(name: "progressCard")

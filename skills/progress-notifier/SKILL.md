@@ -60,8 +60,11 @@ The API accepts optional plain text descriptions (up to 2,000 characters; newlin
 Each is saved with that request's percentage and server timestamp. Consecutive identical
 description/percentage pairs are deduplicated. Omitted or blank descriptions preserve
 existing notes and add no entry; progress and ETA still update. The card shows the latest
-note and retained update count. D unfolds the timestamp ledger on all tasks, newest first,
-with a recorded percentage and bar for each note. The latest 200 notes per task persist
+note and retained update count. Up/Down or K/J selects a task (Down/J next, Up/K previous).
+D unfolds the timestamp ledger for the focused task only, newest first, with a recorded
+percentage and bar for each note. When details are open, moving selection switches the
+ledger to that task and folds the others. A mint outline marks the selection. Navigation
+keeps it visible; background updates do not change which task is selected. The latest 200 notes per task persist
 through relaunch and H recall. `GET /items` returns `description`, `updateCount`, and
 `updates` (id, description, progress, recordedAt). Do not treat the notes as separate tasks.
 
@@ -75,7 +78,7 @@ Report meaningful milestones while the requested work runs. Use honest estimates
 
 An item's X or `--dismiss` hides that name for the rest of its run: further updates remain silent until a `100` update clears the dismissal. A new run may then reuse the name. Completion updates for unknown names are harmless no-ops.
 
-Q, ⌘W, or the window's X hides the window while the app keeps receiving updates. Updates do not reopen a hidden window. Opening the app again restores the current items. Click anywhere except an X, or press M, to toggle between the full list and a compact list with an icon and title-free bar for each item, without a header. Compact rows use the project icon, or a task-name monogram when there is no project metadata; hover to see the task name. With no items, the expanded window says “No progress”. Items and dismissals are saved across quitting/relaunching. The app also saves the latest 200 completed results as hidden history. With the panel focused, H recalls one result at a time, newest first, and expands the panel; C hides all completed results and resets H to the newest result without deleting history or affecting active tasks. Recalled cards stay until cleared or individually dismissed and do not replay completion effects. History can also be recalled and cleared from the menu bar menu; it stays hidden after relaunch. `GET /items` lists current tasks only, excluding recalled history. Use the menu bar's Quit or ⌘Q to stop the app entirely; later skill calls silently skip until the user opens it again.
+Q, ⌘W, or the window's X hides the window while the app keeps receiving updates. Updates do not reopen a hidden window. Opening the app again restores the current items. Click anywhere except an X, or press M, to toggle between the full list and a compact list with an icon and title-free bar for each item, without a header. Compact rows use the project icon, or a task-name monogram when there is no project metadata. With no items, the expanded window says “No progress”. Items and dismissals are saved across quitting/relaunching. The app also saves the latest 200 completed results as hidden history. With the panel focused, H recalls one result at a time, newest first, and expands the panel; C hides all completed results and resets H to the newest result without deleting history or affecting active tasks. Recalled cards stay until cleared or individually dismissed and do not replay completion effects. History can also be recalled and cleared from the menu bar menu; it stays hidden after relaunch. `GET /items` lists current tasks only, excluding recalled history. Use the menu bar's Quit or ⌘Q to stop the app entirely; later skill calls silently skip until the user opens it again.
 
 The API is `http://127.0.0.1:8766`, local to the Mac running the app. For direct clients:
 

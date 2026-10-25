@@ -66,7 +66,8 @@ packages resources and the icon, and ad-hoc signs `build/Progress Notifier.app`.
    Require matching executable hashes. For HTTP or lifecycle changes, also run
    `python3 scripts/smoke-test.py`; it creates temporary progress cards and plays a
    completion sound. For layout changes, check H recall, C clear, M mode changes,
-   rapid reversals, and scrolling only after the stack reaches the screen limit.
+   rapid reversals, Up/Down and J/K task selection, D scoped to the selected task,
+   and scrolling only after the stack reaches the screen limit.
 
 The local app, restart, health check, and matching executable hashes have been
 verified. No remote fleet runtime is involved in this deployment.

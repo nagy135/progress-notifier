@@ -111,14 +111,14 @@ final class ProgressPresentationTests: XCTestCase {
         XCTAssertEqual(presentation.rows.map(\.id), [active.id, history.id])
     }
 
-    func testDToggleUnfoldsAllHistoriesOnTheSameClockAndRespectsScreenCap() throws {
+    func testDToggleUnfoldsOnlyFocusedHistoryAndRespectsScreenCap() throws {
         let registry = ProgressRegistry()
         for name in ["First", "Second"] {
             try registry.update(.init(name: name, progress: 25, etaSeconds: 60, description: "Started"))
             try registry.update(.init(name: name, progress: 75, etaSeconds: 20, description: "Tested"))
         }
         let presentation = ProgressPresentation(compact: false)
-        presentation.maximumHeight = 500
+        presentation.maximumHeight = 450
         presentation.update(items: registry.items, compact: false, animated: false)
         let heights = Dictionary(uniqueKeysWithValues: registry.items.map { ($0.id, CGFloat(90)) })
         presentation.measure(heights, animated: false)
@@ -126,10 +126,10 @@ final class ProgressPresentationTests: XCTestCase {
         XCTAssertTrue(presentation.rows.allSatisfy { $0.historyHeight == 0 })
         let folded = presentation.windowHeight
         let frames = settle(presentation) { presentation.setShowsUpdates(true, animated: true) }
-        XCTAssertTrue(presentation.rows.allSatisfy { $0.historyHeight == 90 })
+        XCTAssertEqual(presentation.rows.map(\.historyHeight), [90, 0])
         XCTAssertTrue(zip(frames, frames.dropFirst()).allSatisfy { $0 <= $1 })
         XCTAssertTrue(presentation.needsScrolling)
-        XCTAssertEqual(presentation.windowHeight, 500)
+        XCTAssertEqual(presentation.windowHeight, 450)
         _ = settle(presentation) { presentation.setShowsUpdates(false, animated: true) }
         XCTAssertEqual(presentation.windowHeight, folded)
         XCTAssertFalse(presentation.needsScrolling)

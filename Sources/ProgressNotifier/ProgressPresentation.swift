@@ -17,6 +17,7 @@ final class ProgressPresentation: ObservableObject {
     @Published private(set) var rows: [Row] = []
     @Published private(set) var emptyPresence: CGFloat = 1
     @Published private(set) var showsUpdates = false
+    @Published private(set) var focusedItemID: UUID?
     @Published private(set) var updatesControlPresence: CGFloat = 0
     @Published var maximumHeight: CGFloat = 800
     var geometryChanged: (() -> Void)?
@@ -52,7 +53,12 @@ final class ProgressPresentation: ObservableObject {
     var needsScrolling: Bool { naturalContentHeight > maximumHeight - chromeHeight + 0.5 }
 
     func update(items: [ProgressItem], compact: Bool, animated: Bool) {
+        let previousIndex = desiredItems.firstIndex(where: { $0.id == focusedItemID }) ?? 0
         desiredItems = items
+        if !items.contains(where: { $0.id == focusedItemID }) {
+            focusedItemID = items.isEmpty ? nil : items[min(previousIndex, items.count - 1)].id
+        }
+        if items.isEmpty { showsUpdates = false }
         targetExpansion = compact ? 0 : 1
         let existing = Dictionary(uniqueKeysWithValues: rows.map { ($0.id, $0) })
         let desiredIDs = Set(items.map(\.id))
@@ -77,8 +83,20 @@ final class ProgressPresentation: ObservableObject {
         animate(animated: animated)
     }
 
+    var focusedItem: ProgressItem? { desiredItems.first { $0.id == focusedItemID } }
+
+    func moveFocus(by offset: Int, animated: Bool) {
+        guard !desiredItems.isEmpty else { return }
+        let current = desiredItems.firstIndex(where: { $0.id == focusedItemID }) ?? 0
+        let next = min(max(0, current + offset), desiredItems.count - 1)
+        guard desiredItems[next].id != focusedItemID else { return }
+        focusedItemID = desiredItems[next].id
+        // When the ledger is open it follows selection, leaving all other rows folded.
+        if showsUpdates { animate(animated: animated) }
+    }
+
     func setShowsUpdates(_ shown: Bool, animated: Bool) {
-        showsUpdates = shown
+        showsUpdates = shown && focusedItemID != nil
         animate(animated: animated)
     }
 
@@ -115,7 +133,7 @@ final class ProgressPresentation: ObservableObject {
             var target = row
             target.presence = desiredIDs.contains(row.id) ? 1 : 0
             target.detailsHeight = measuredHeights[row.id] ?? row.detailsHeight
-            target.historyHeight = showsUpdates ? measuredHistoryHeights[row.id] ?? 0 : 0
+            target.historyHeight = showsUpdates && row.id == focusedItemID ? measuredHistoryHeights[row.id] ?? 0 : 0
             return target
         }
         let apply: (CGFloat) -> Void = { [weak self] fraction in

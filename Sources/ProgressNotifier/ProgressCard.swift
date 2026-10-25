@@ -165,7 +165,7 @@ private struct SnapshotRow: View {
                 .font(.system(size: 9, weight: latest ? .medium : .regular)).monospacedDigit()
                 .foregroundStyle(latest ? Color.mint : Color.secondary)
                 .frame(width: 30, alignment: .leading).padding(.top, 2)
-                .help(entry.recordedAt.formatted(date: .abbreviated, time: .standard))
+                .accessibilityLabel(entry.recordedAt.formatted(date: .abbreviated, time: .standard))
             VStack(alignment: .leading, spacing: 7) {
                 Text(entry.description).font(.system(size: 12))
                     .foregroundStyle(latest ? Color.primary : Color.secondary)
@@ -187,6 +187,8 @@ private struct ItemCard: View {
     let dismiss: () -> Void
     let detailsHeight: CGFloat
     let historyHeight: CGFloat
+    let selected: Bool
+    let panelFocused: Bool
 
     private var tint: Color { item.completing ? .green : Color(red: 0.23, green: 0.72, blue: 0.64) }
     private var detailOpacity: Double { Double(max(0, (expansion - 0.25) / 0.75)) }
@@ -202,14 +204,14 @@ private struct ItemCard: View {
         VStack(alignment: .leading, spacing: 2) {
             if let project = item.project {
                 Text(project).font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.secondary).lineLimit(1).help(project)
+                    .foregroundStyle(.secondary).lineLimit(1)
                     .frame(height: 16).padding(.leading, 22)
             }
             Text(item.name).font(.system(size: 13, weight: .semibold))
-                .lineLimit(2).help(item.name).padding(.trailing, 30)
+                .lineLimit(2).padding(.trailing, 30)
                 .padding(.leading, item.project == nil ? 22 : 0)
             HStack(spacing: 4) {
-                Text(timing).lineLimit(1).minimumScaleFactor(0.8).help(timing)
+                Text(timing).lineLimit(1).minimumScaleFactor(0.8)
                 if !item.updates.isEmpty {
                     Spacer(minLength: 4)
                     Label(item.updates.count == 1 ? "1 update" : "\(item.updates.count) updates", systemImage: "text.alignleft")
@@ -290,7 +292,7 @@ private struct ItemCard: View {
                 Image(systemName: "xmark").font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(.secondary).frame(width: 22, height: 22).contentShape(Rectangle())
             }
-            .buttonStyle(.plain).help("Dismiss \(item.name)")
+            .buttonStyle(.plain)
             .accessibilityLabel("Dismiss \(item.name)")
             .modifier(ExcludeFromToggle())
             .padding(.trailing, 12 * expansion).padding(.top, 9 * expansion)
@@ -301,7 +303,17 @@ private struct ItemCard: View {
         .modifier(UpdatePulse(revision: revision, consumeUpdatePulse: consumeUpdatePulse,
                               tint: tint, cornerRadius: blend(4, 12, expansion),
                               scale: 1 + 0.035 * expansion))
-        .help(item.name)
+        .overlay {
+            RoundedRectangle(cornerRadius: blend(4, 12, expansion))
+                .fill(Color.mint.opacity(selected ? 0.055 : 0))
+                .overlay {
+                    RoundedRectangle(cornerRadius: blend(4, 12, expansion))
+                        .strokeBorder(Color.mint.opacity(selected ? (panelFocused ? 0.8 : 0.3) : 0), lineWidth: 1)
+                }
+                .allowsHitTesting(false)
+        }
+        .accessibilityAddTraits(selected ? .isSelected : [])
+
     }
 }
 
@@ -321,6 +333,7 @@ struct ProgressCard: View {
     let toggleCompact: () -> Void
     let close: () -> Void
     @State private var buttonFrames: [CGRect] = []
+    @State private var focusScrollGeneration = 0
 
     private var expansion: CGFloat { presentation.expansion }
     private var runningCount: Int { model.items.filter { !$0.completing }.count }
@@ -344,41 +357,47 @@ struct ProgressCard: View {
             .padding(.bottom, 8 * expansion)
             .accessibilityHidden(expansion < 0.5)
 
-            ScrollView(.vertical, showsIndicators: presentation.needsScrolling) {
-                TimelineView(.periodic(from: .now, by: 1)) { context in
-                    VStack(alignment: .leading, spacing: 0) {
-                        ForEach(Array(presentation.rows.enumerated()), id: \.element.id) { index, row in
-                            ItemCard(item: row.item, revision: model.revision(for: row.item),
-                                     consumeUpdatePulse: { model.consumeUpdatePulse(for: row.item) },
-                                     now: context.date, expansion: expansion,
-                                     dismiss: { model.dismiss(row.item) }, detailsHeight: row.detailsHeight,
-                                     historyHeight: row.historyHeight)
-                                .frame(width: blend(144, Self.expandedRowWidth, expansion), alignment: .leading)
+            ScrollViewReader { proxy in
+                ScrollView(.vertical, showsIndicators: presentation.needsScrolling) {
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        VStack(alignment: .leading, spacing: 0) {
+                            ForEach(Array(presentation.rows.enumerated()), id: \.element.id) { index, row in
+                                ItemCard(item: row.item, revision: model.revision(for: row.item),
+                                         consumeUpdatePulse: { model.consumeUpdatePulse(for: row.item) },
+                                         now: context.date, expansion: expansion,
+                                         dismiss: { model.dismiss(row.item) }, detailsHeight: row.detailsHeight,
+                                         historyHeight: row.historyHeight,
+                                         selected: presentation.focusedItemID == row.id, panelFocused: model.isFocused)
+                                    .frame(width: blend(144, Self.expandedRowWidth, expansion), alignment: .leading)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .frame(height: presentation.rowHeight(row) * row.presence,
+                                           alignment: .top)
+                                    .opacity(Double(row.presence)).clipped()
+                                    .allowsHitTesting(row.presence > 0.95)
+                                    .accessibilityHidden(row.presence < 0.5)
+                                    .padding(.top, presentation.spacing(before: index))
+                                    .id(row.id)
+                            }
+                            emptyState
+                                .frame(height: 20 + 80 * expansion)
                                 .fixedSize(horizontal: false, vertical: true)
-                                .frame(height: presentation.rowHeight(row) * row.presence,
-                                       alignment: .top)
-                                .opacity(Double(row.presence)).clipped()
-                                .allowsHitTesting(row.presence > 0.95)
-                                .accessibilityHidden(row.presence < 0.5)
-                                .padding(.top, presentation.spacing(before: index))
+                                .frame(height: (20 + 80 * expansion) * presentation.emptyPresence, alignment: .top)
+                                .opacity(Double(presentation.emptyPresence)).clipped()
+                                .accessibilityHidden(presentation.emptyPresence < 0.5)
                         }
-                        emptyState
-                            .frame(height: 20 + 80 * expansion)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .frame(height: (20 + 80 * expansion) * presentation.emptyPresence, alignment: .top)
-                            .opacity(Double(presentation.emptyPresence)).clipped()
-                            .accessibilityHidden(presentation.emptyPresence < 0.5)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 4 * expansion * (1 - presentation.emptyPresence))
+                        .padding(.horizontal, 4 * expansion)
+                        .frame(height: presentation.naturalContentHeight, alignment: .top)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 4 * expansion * (1 - presentation.emptyPresence))
-                    .padding(.horizontal, 4 * expansion)
-                    .frame(height: presentation.naturalContentHeight, alignment: .top)
                 }
+                .scrollDisabled(!presentation.needsScrolling)
+                .padding(.trailing, 32 * (1 - expansion))
+                .frame(height: presentation.contentHeight, alignment: .top)
+                .clipped()
+                .onChange(of: presentation.focusedItemID) { _ in revealFocus(using: proxy) }
+                .onChange(of: presentation.showsUpdates) { _ in revealFocus(using: proxy) }
             }
-            .scrollDisabled(!presentation.needsScrolling)
-            .padding(.trailing, 32 * (1 - expansion))
-            .frame(height: presentation.contentHeight, alignment: .top)
-            .clipped()
 
             HStack {
                 Button(action: toggleUpdates) {
@@ -390,10 +409,10 @@ struct ProgressCard: View {
                     }
                 }
                 .buttonStyle(.plain).modifier(ExcludeFromToggle())
-                .accessibilityLabel(presentation.showsUpdates ? "Hide earlier updates for all tasks" : "Show updates for all tasks")
-                .help("Toggle description history for all tasks (D)")
+                .disabled(presentation.focusedItem?.updates.isEmpty != false)
+                .accessibilityLabel(presentation.showsUpdates ? "Hide earlier updates for focused task" : "Show updates for focused task")
                 Spacer()
-                Text("Newest first").font(.system(size: 9))
+                Text("↑↓  J/K").font(.system(size: 9))
             }
             .font(.system(size: 11)).foregroundStyle(.secondary)
             .frame(height: 30 * expansion * presentation.updatesControlPresence, alignment: .bottom)
@@ -417,7 +436,6 @@ struct ProgressCard: View {
                     .foregroundStyle(.secondary).frame(width: 24, height: 24).contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help("Close progress window")
             .accessibilityLabel("Close progress window")
             .modifier(ExcludeFromToggle())
             .padding(.horizontal, Self.horizontalInset(expansion: expansion))
@@ -438,6 +456,27 @@ struct ProgressCard: View {
         .simultaneousGesture(SpatialTapGesture().onEnded { value in
             if !buttonFrames.contains(where: { $0.contains(value.location) }) { toggleCompact() }
         })
+    }
+
+    private func revealFocus(using proxy: ScrollViewProxy) {
+        focusScrollGeneration += 1
+        let generation = focusScrollGeneration
+        guard let id = presentation.focusedItemID else { return }
+        let anchor: UnitPoint? = presentation.showsUpdates ? .top : nil
+        // Resolve against the new row layout, then once more when native resizing ends.
+        // This only follows keyboard selection/detail actions, not background progress updates.
+        DispatchQueue.main.async {
+            guard generation == focusScrollGeneration, presentation.focusedItemID == id else { return }
+            proxy.scrollTo(id, anchor: anchor)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + ProgressPresentation.transitionDuration + 0.03) {
+            guard generation == focusScrollGeneration, presentation.focusedItemID == id else { return }
+            if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                proxy.scrollTo(id, anchor: anchor)
+            } else {
+                withAnimation(.easeOut(duration: 0.12)) { proxy.scrollTo(id, anchor: anchor) }
+            }
+        }
     }
 
     private var emptyState: some View {

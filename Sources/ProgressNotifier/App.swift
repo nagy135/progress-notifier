@@ -71,7 +71,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 if NSApp.isActive { NSApp.deactivate() }
                 return nil
             }
+            switch event.keyCode {
+            case 125: self.presentation.moveFocus(by: 1, animated: true); return nil
+            case 126: self.presentation.moveFocus(by: -1, animated: true); return nil
+            default: break
+            }
             switch event.charactersIgnoringModifiers?.lowercased() {
+            case "j": self.presentation.moveFocus(by: 1, animated: true); return nil
+            case "k": self.presentation.moveFocus(by: -1, animated: true); return nil
             case "q": self.hideProgress(); return nil
             case "m": self.toggleCompact(); return nil
             case "h": self.recallCompleted(); return nil
@@ -129,7 +136,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private func addHistoryActions(to menu: NSMenu) {
         menu.addItem(.separator())
-        let updates = NSMenuItem(title: "Toggle Update Details (D)", action: #selector(toggleUpdates), keyEquivalent: "")
+        let updates = NSMenuItem(title: "Toggle Focused Task Details (D)", action: #selector(toggleUpdates), keyEquivalent: "")
         updates.target = self
         menu.addItem(updates)
         let recall = NSMenuItem(title: "Recall Completed Result (H)", action: #selector(recallCompleted), keyEquivalent: "")
@@ -142,6 +149,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     @objc private func toggleUpdates() {
+        guard presentation.focusedItemID != nil else { return }
         let shown = !presentation.showsUpdates
         if compact {
             compact = false

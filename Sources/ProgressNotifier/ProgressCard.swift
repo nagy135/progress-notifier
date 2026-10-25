@@ -470,7 +470,7 @@ struct ProgressCard: View {
                 .overlay {
                     // Keep dark windows and games from turning light mode gray.
                     if colorScheme == .light {
-                        RoundedRectangle(cornerRadius: 20).fill(Color.white.opacity(0.94))
+                        RoundedRectangle(cornerRadius: 20).fill(Color.white.opacity(0.80))
                     }
                 }
         }

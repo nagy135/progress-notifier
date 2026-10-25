@@ -227,6 +227,8 @@ struct ProgressCard: View {
     private var expansion: CGFloat { presentation.expansion }
     private var runningCount: Int { model.items.filter { !$0.completing }.count }
 
+    static func contentInset(expansion: CGFloat) -> CGFloat { blend(6, 14, expansion) }
+
     static func compactContentHeight(itemCount: Int) -> CGFloat {
         max(24, CGFloat(itemCount) * 28 - 4)
     }
@@ -234,14 +236,15 @@ struct ProgressCard: View {
     static func contentHeight(itemCount: Int, expandedContentHeight: CGFloat?,
                               maximumHeight: CGFloat, expansion: CGFloat) -> CGFloat {
         let expanded = itemCount == 0 ? 100 : expandedContentHeight ?? CGFloat(itemCount) * 100 + 8
-        return blend(min(compactContentHeight(itemCount: itemCount), maximumHeight - 48),
+        return blend(min(compactContentHeight(itemCount: itemCount), maximumHeight - 32),
                      min(expanded, maximumHeight - expandedChromeHeight), expansion)
     }
 
     static func windowHeight(itemCount: Int, expandedContentHeight: CGFloat?,
                              maximumHeight: CGFloat, expansion: CGFloat) -> CGFloat {
-        48 + 32 * expansion + contentHeight(itemCount: itemCount, expandedContentHeight: expandedContentHeight,
-                                           maximumHeight: maximumHeight, expansion: expansion)
+        20 + 2 * contentInset(expansion: expansion) + 32 * expansion
+            + contentHeight(itemCount: itemCount, expandedContentHeight: expandedContentHeight,
+                            maximumHeight: maximumHeight, expansion: expansion)
     }
 
     var body: some View {
@@ -295,7 +298,7 @@ struct ProgressCard: View {
                                              expandedContentHeight: expandedContentHeight,
                                              maximumHeight: maximumHeight, expansion: expansion))
         }
-        .padding(14)
+        .padding(Self.contentInset(expansion: expansion))
         .frame(width: blend(200, 350, expansion))
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
         .overlay(RoundedRectangle(cornerRadius: 20).fill(Color.mint.opacity(model.isFocused ? 0.06 : 0))
@@ -313,7 +316,7 @@ struct ProgressCard: View {
             .help("Close progress window")
             .accessibilityLabel("Close progress window")
             .modifier(ExcludeFromToggle())
-            .padding(14)
+            .padding(Self.contentInset(expansion: expansion))
         }
         .padding(10)
         .coordinateSpace(name: "progressCard")

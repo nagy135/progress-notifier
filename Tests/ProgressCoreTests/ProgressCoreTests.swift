@@ -2,6 +2,149 @@ import XCTest
 @testable import ProgressCore
 
 final class ProgressCoreTests: XCTestCase {
+    func testHistoryRecallsOneAtATimeNewestFirstAndClearResetsIt() throws {
+        let registry = ProgressRegistry()
+        let older = try finish("Older", in: registry)
+        let newer = try finish("Newer", in: registry)
+        try registry.update(.init(name: "Running", progress: 20, etaSeconds: 60))
+
+        XCTAssertTrue(registry.revealedHistory.isEmpty)
+        XCTAssertTrue(registry.revealNextCompleted())
+        XCTAssertEqual(registry.revealedHistory.map(\.id), [newer])
+        XCTAssertTrue(registry.revealNextCompleted())
+        XCTAssertEqual(registry.revealedHistory.map(\.id), [newer, older])
+        XCTAssertFalse(registry.revealNextCompleted())
+
+        registry.clearCompleted()
+        XCTAssertTrue(registry.revealedHistory.isEmpty)
+        XCTAssertEqual(registry.items.map(\.name), ["Running"])
+        XCTAssertEqual(registry.history.count, 2)
+        XCTAssertTrue(registry.revealNextCompleted())
+        XCTAssertEqual(registry.revealedHistory.map(\.id), [newer])
+        XCTAssertTrue(registry.revealNextCompleted())
+        XCTAssertEqual(registry.revealedHistory.map(\.id), [newer, older])
+    }
+
+    func testCompletionIsArchivedImmediatelyAndRestoredOnlyOnRecall() throws {
+        let registry = ProgressRegistry()
+        let start = Date(timeIntervalSince1970: 1000)
+        let end = start.addingTimeInterval(47)
+        let icon = ProjectIcon(kind: .emoji, emoji: "🎹")
+        try registry.update(.init(name: "Build", progress: 10, etaSeconds: 60, project: "Project", projectIcon: icon), now: start)
+        XCTAssertTrue(try registry.update(.init(name: "Build", progress: 100, etaSeconds: 0), now: end))
+        XCTAssertFalse(try registry.update(.init(name: "Build", progress: 100, etaSeconds: 0), now: end))
+        XCTAssertEqual(registry.history.count, 1)
+        XCTAssertFalse(registry.revealNextCompleted(), "A finishing card must not appear twice")
+
+        let data = try JSONEncoder().encode(registry.snapshot)
+        let restored = ProgressRegistry(snapshot: try JSONDecoder().decode(ProgressSnapshot.self, from: data))
+        XCTAssertTrue(restored.items.isEmpty)
+        XCTAssertTrue(restored.revealedHistory.isEmpty)
+        XCTAssertTrue(restored.revealNextCompleted())
+        let result = try XCTUnwrap(restored.revealedHistory.first)
+        XCTAssertEqual(result.id, registry.items[0].id)
+        XCTAssertEqual(result.createdAt, start)
+        XCTAssertEqual(result.completedAt, end)
+        XCTAssertEqual(result.project, "Project")
+        XCTAssertEqual(result.projectIcon, icon)
+        XCTAssertEqual(result.progress, 100)
+
+        let relaunched = ProgressRegistry(snapshot: restored.snapshot)
+        XCTAssertTrue(relaunched.revealedHistory.isEmpty)
+        XCTAssertTrue(relaunched.revealNextCompleted())
+        XCTAssertEqual(relaunched.revealedHistory[0].id, result.id)
+    }
+
+    func testClearDuringCompletionAllowsRecallThatSurvivesDelayedRemoval() throws {
+        let registry = ProgressRegistry()
+        try registry.update(.init(name: "Build", progress: 10, etaSeconds: 60))
+        try registry.update(.init(name: "Build", progress: 100, etaSeconds: 0))
+        let id = registry.items[0].id
+        registry.clearCompleted()
+        XCTAssertTrue(registry.items.isEmpty)
+        XCTAssertTrue(registry.revealNextCompleted())
+        registry.removeCompleted(id: id) // The original 1.25-second callback.
+        XCTAssertEqual(registry.revealedHistory.map(\.id), [id])
+    }
+
+    func testRecalledResultsCannotBlockOrDismissNewRunsWithTheSameName() throws {
+        let registry = ProgressRegistry()
+        let older = try finish("Build", in: registry)
+        let newer = try finish("Build", in: registry)
+        try registry.update(.init(name: "Build", progress: 10, etaSeconds: 60))
+        let runningID = registry.items[0].id
+        XCTAssertTrue(registry.revealNextCompleted())
+        XCTAssertEqual(registry.revealedHistory.map(\.id), [newer])
+
+        registry.dismiss(id: newer)
+        XCTAssertEqual(registry.items.map(\.id), [runningID])
+        try registry.update(.init(name: "Build", progress: 20, etaSeconds: 40))
+        XCTAssertEqual(registry.items[0].progress, 20)
+        XCTAssertTrue(registry.revealNextCompleted())
+        XCTAssertEqual(registry.revealedHistory.map(\.id), [older])
+        XCTAssertFalse(registry.revealNextCompleted())
+        registry.clearCompleted()
+        XCTAssertTrue(registry.revealNextCompleted())
+        XCTAssertEqual(registry.revealedHistory.map(\.id), [newer])
+    }
+
+    func testNewCompletionsBecomeTheNextRecallWithoutRepeatingVisitedResults() throws {
+        let registry = ProgressRegistry()
+        let older = try finish("Older", in: registry)
+        XCTAssertTrue(registry.revealNextCompleted())
+        let newer = try finish("Newer", in: registry)
+        XCTAssertTrue(registry.revealNextCompleted())
+        XCTAssertEqual(registry.revealedHistory.map(\.id), [newer, older])
+        XCTAssertFalse(registry.revealNextCompleted())
+    }
+
+    func testHistoryIsBoundedAndDoesNotUseActiveItemCapacity() throws {
+        let registry = ProgressRegistry()
+        var newest: UUID?
+        for index in 0...ProgressRegistry.historyLimit {
+            newest = try finish("Done \(index)", in: registry)
+        }
+        XCTAssertEqual(registry.history.count, ProgressRegistry.historyLimit)
+        XCTAssertEqual(registry.history.first?.id, newest)
+        for index in 0..<50 {
+            try registry.update(.init(name: "Running \(index)", progress: 10, etaSeconds: 60))
+        }
+        XCTAssertTrue(registry.revealNextCompleted())
+        XCTAssertEqual(registry.revealedHistory.first?.id, newest)
+        XCTAssertEqual(registry.items.count, 50)
+        XCTAssertThrowsError(try registry.update(.init(name: "Overflow", progress: 10, etaSeconds: 60)))
+        registry.clearCompleted()
+        XCTAssertEqual(registry.items.count, 50)
+    }
+
+    private func finish(_ name: String, in registry: ProgressRegistry) throws -> UUID {
+        try registry.update(.init(name: name, progress: 10, etaSeconds: 60))
+        try registry.update(.init(name: name, progress: 100, etaSeconds: 0))
+        let id = try XCTUnwrap(registry.items.first(where: { $0.name == name })?.id)
+        registry.removeCompleted(id: id)
+        return id
+    }
+
+    func testFirstAddedDateSurvivesUpdatesAndRelaunchAndResetsForNewRun() throws {
+        let registry = ProgressRegistry()
+        let start = Date(timeIntervalSince1970: 1000)
+        try registry.update(.init(name: "Build", progress: 10, etaSeconds: 60), now: start)
+        try registry.update(.init(name: "Build", progress: 20, etaSeconds: 30), now: start.addingTimeInterval(47))
+        XCTAssertEqual(registry.items[0].createdAt, start)
+
+        let data = try JSONEncoder().encode(registry.snapshot)
+        let restored = ProgressRegistry(snapshot: try JSONDecoder().decode(ProgressSnapshot.self, from: data))
+        try restored.update(.init(name: "Build", progress: 30, etaSeconds: 20), now: start.addingTimeInterval(300))
+        XCTAssertEqual(restored.items[0].createdAt, start)
+
+        try restored.update(.init(name: "Build", progress: 100, etaSeconds: 0), now: start.addingTimeInterval(400))
+        XCTAssertEqual(restored.items[0].createdAt, start)
+        restored.removeCompleted(id: restored.items[0].id)
+        let nextStart = start.addingTimeInterval(500)
+        try restored.update(.init(name: "Build", progress: 0, etaSeconds: 60), now: nextStart)
+        XCTAssertEqual(restored.items[0].createdAt, nextStart)
+    }
+
     func testProjectMetadataSurvivesUpdatesAndSnapshot() throws {
         let registry = ProgressRegistry()
         let icon = ProjectIcon(kind: .lucide, name: "snowflake", color: "blue")
@@ -27,6 +170,10 @@ final class ProgressCoreTests: XCTestCase {
         let registry = ProgressRegistry(snapshot: try JSONDecoder().decode(ProgressSnapshot.self, from: Data(snapshot.utf8)))
         XCTAssertEqual(registry.items.count, 1)
         XCTAssertNil(registry.items[0].project)
+        XCTAssertNil(registry.items[0].createdAt)
+        XCTAssertTrue(registry.history.isEmpty)
+        try registry.update(.init(name: "Build", progress: 20, etaSeconds: 30))
+        XCTAssertNil(registry.items[0].createdAt)
     }
 
     func testT3IconsAndDefaultMonograms() throws {
@@ -118,6 +265,7 @@ final class ProgressCoreTests: XCTestCase {
         XCTAssertTrue(registry.items.isEmpty)
         try registry.update(.init(name: "Build", progress: 100, etaSeconds: 0))
         XCTAssertTrue(registry.items.isEmpty)
+        XCTAssertTrue(registry.history.isEmpty)
         try registry.update(.init(name: "Build", progress: 0, etaSeconds: 30))
         XCTAssertEqual(registry.items.count, 1)
     }

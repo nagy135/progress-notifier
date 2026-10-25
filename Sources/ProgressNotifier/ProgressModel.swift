@@ -4,13 +4,26 @@ import ProgressCore
 
 final class ProgressModel: ObservableObject {
     @Published private(set) var items: [ProgressItem] = []
+    @Published private(set) var recalledItems: [ProgressItem] = []
+    @Published var isFocused = false
+    var displayItems: [ProgressItem] { items + recalledItems }
+    var hasHistory: Bool { !registry.history.isEmpty }
     private let registry: ProgressRegistry
     private let stateURL: URL
     var changed: (() -> Void)?
     private var sound: NSSound?
     private var revisions: [UUID: UInt64] = [:]
+    private var flashedRevisions: [UUID: UInt64] = [:]
 
     func revision(for item: ProgressItem) -> UInt64 { revisions[item.id] ?? 0 }
+
+    // Keep this outside the views so changing layouts cannot replay an update.
+    func consumeUpdatePulse(for item: ProgressItem) -> Bool {
+        let revision = revision(for: item)
+        guard revision > 0, flashedRevisions[item.id] != revision else { return false }
+        flashedRevisions[item.id] = revision
+        return true
+    }
 
     init() {
         stateURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -21,6 +34,16 @@ final class ProgressModel: ObservableObject {
     }
 
     func dismiss(_ name: String) { registry.dismiss(name: name); publish() }
+    func dismiss(_ item: ProgressItem) { registry.dismiss(id: item.id); publish() }
+
+    @discardableResult
+    func recallCompleted() -> Bool {
+        guard registry.revealNextCompleted() else { return false }
+        publish()
+        return true
+    }
+
+    func clearCompleted() { registry.clearCompleted(); publish() }
 
     func handle(_ request: HTTPRequest) -> HTTPResponse {
         guard request.headers["origin"] == nil,
@@ -87,7 +110,11 @@ final class ProgressModel: ObservableObject {
     private func publish() {
         let ids = Set(registry.items.map(\.id))
         revisions = revisions.filter { ids.contains($0.key) }
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) { items = registry.items }
+        flashedRevisions = flashedRevisions.filter { ids.contains($0.key) }
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+            items = registry.items
+            recalledItems = registry.revealedHistory
+        }
         do {
             try FileManager.default.createDirectory(at: stateURL.deletingLastPathComponent(), withIntermediateDirectories: true)
             try JSONEncoder().encode(registry.snapshot).write(to: stateURL, options: .atomic)

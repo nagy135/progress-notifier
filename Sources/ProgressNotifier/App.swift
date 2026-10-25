@@ -7,7 +7,7 @@ private final class ProgressPanel: NSPanel {
     override func close() { hideProgress?() }
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let model = ProgressModel()
     private let server = HTTPServer()
     private var panel: NSPanel?
@@ -24,6 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let hide = NSMenuItem(title: "Close Progress Window", action: #selector(hideProgress), keyEquivalent: "w")
         hide.target = self
         appMenu.addItem(hide)
+        addHistoryActions(to: appMenu)
         appMenu.addItem(withTitle: "Quit Progress Notifier", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         let mainMenu = NSMenu()
         let appItem = NSMenuItem()
@@ -42,6 +43,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let hideItem = NSMenuItem(title: "Close Progress Window", action: #selector(hideProgress), keyEquivalent: "")
         hideItem.target = self
         menu.addItem(hideItem)
+        addHistoryActions(to: menu)
         menu.addItem(withTitle: "Quit Progress Notifier", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         item.menu = menu
         statusItem = item
@@ -50,6 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let panel = ProgressPanel(contentRect: NSRect(x: 0, y: 0, width: 370, height: 200),
                                   styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.title = "Progress Notifier"
+        panel.delegate = self
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = true
@@ -66,6 +69,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             switch event.charactersIgnoringModifiers?.lowercased() {
             case "q": self.hideProgress(); return nil
             case "m": self.toggleCompact(); return nil
+            case "h": self.recallCompleted(); return nil
+            case "c": self.model.clearCompleted(); return nil
             default: return event
             }
         }
@@ -111,6 +116,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshPanel()
     }
 
+    private func addHistoryActions(to menu: NSMenu) {
+        menu.addItem(.separator())
+        let recall = NSMenuItem(title: "Recall Completed Result (H)", action: #selector(recallCompleted), keyEquivalent: "")
+        recall.target = self
+        menu.addItem(recall)
+        let clear = NSMenuItem(title: "Clear Completed Results (C)", action: #selector(clearCompleted), keyEquivalent: "")
+        clear.target = self
+        menu.addItem(clear)
+        menu.addItem(.separator())
+    }
+
+    @objc private func recallCompleted() {
+        guard model.recallCompleted() else { return }
+        compact = false
+        UserDefaults.standard.set(false, forKey: "compactMode")
+        showProgress()
+    }
+
+    @objc private func clearCompleted() { model.clearCompleted() }
+
     private func refreshPanel(reposition: Bool = false) {
         guard let panel else { return }
         statusItem?.button?.title = model.items.isEmpty ? "" : " \(model.items.count)"
@@ -135,9 +160,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             hosting.sizingOptions = []
             panel.contentView = hosting
         }
-        let height = compact ? ProgressCard.compactHeight(itemCount: model.items.count, maximumHeight: maximumHeight)
-            : model.items.isEmpty ? 100 + ProgressCard.expandedChromeHeight
-            : min((expandedContentHeight ?? CGFloat(model.items.count) * 100 + 8) + ProgressCard.expandedChromeHeight, maximumHeight)
+        let height = compact ? ProgressCard.compactHeight(itemCount: model.displayItems.count, maximumHeight: maximumHeight)
+            : model.displayItems.isEmpty ? 100 + ProgressCard.expandedChromeHeight
+            : min((expandedContentHeight ?? CGFloat(model.displayItems.count) * 100 + 8) + ProgressCard.expandedChromeHeight, maximumHeight)
         var frame = panel.frame
         let rightEdge = frame.maxX
         frame.origin.y += frame.height - height
@@ -156,6 +181,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         showProgress()
         return true
     }
+
+    func windowDidBecomeKey(_ notification: Notification) {
+        model.isFocused = true
+    }
+
+    func windowDidResignKey(_ notification: Notification) {
+        model.isFocused = false
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         if let keyboardMonitor { NSEvent.removeMonitor(keyboardMonitor) }
         server.stop()

@@ -46,6 +46,9 @@ public struct ProgressUpdate: Codable {
 public struct ProgressItem: Codable, Identifiable {
     public let id: UUID
     public let name: String
+    // Older snapshots did not record this date.
+    public let createdAt: Date?
+    public var completedAt: Date?
     public var progress: Double
     public var expectedFinish: Date
     public var completing: Bool
@@ -62,30 +65,72 @@ public struct APIError: Error {
 public struct ProgressSnapshot: Codable {
     public let items: [ProgressItem]
     public let dismissed: [String]
+    public let history: [ProgressItem]?
 }
 
 /// Accessed on the main queue. Dismissed names stay silent until their client sends 100%.
 public final class ProgressRegistry {
+    public static let historyLimit = 200
     public private(set) var items: [ProgressItem] = []
+    public private(set) var history: [ProgressItem] = []
+    private var revealedHistoryIDs = Set<UUID>()
+    private var visitedHistoryIDs = Set<UUID>()
     private var dismissed = Set<String>()
     public init(snapshot: ProgressSnapshot? = nil) {
         guard let snapshot else { return }
         var names = Set<String>()
         for item in snapshot.items where !item.completing && item.progress < 100 {
-            guard items.count < 50, item.expectedFinish.timeIntervalSince1970.isFinite,
-                  let value = try? ProgressUpdate(name: item.name, progress: item.progress, etaSeconds: 0,
-                                                 project: item.project, projectIcon: item.projectIcon).validated(),
-                  value.name == item.name, names.insert(item.name).inserted else { continue }
-            var restored = item
-            restored.project = value.project.flatMap { $0.isEmpty ? nil : $0 }
-            restored.projectIcon = value.projectIcon
+            guard items.count < 50, let restored = Self.restored(item),
+                  names.insert(item.name).inserted else { continue }
             items.append(restored)
+        }
+        var ids = Set(items.map(\.id))
+        for item in snapshot.history ?? [] where item.completing && item.progress == 100 {
+            guard history.count < Self.historyLimit, let restored = Self.restored(item),
+                  ids.insert(item.id).inserted else { continue }
+            history.append(restored)
         }
         dismissed = Set(snapshot.dismissed.filter { !names.contains($0) })
     }
 
+    private static func restored(_ item: ProgressItem) -> ProgressItem? {
+        guard item.expectedFinish.timeIntervalSince1970.isFinite,
+              item.createdAt?.timeIntervalSince1970.isFinite != false,
+              item.completedAt?.timeIntervalSince1970.isFinite != false,
+              let value = try? ProgressUpdate(name: item.name, progress: item.progress, etaSeconds: 0,
+                                             project: item.project, projectIcon: item.projectIcon).validated(),
+              value.name == item.name else { return nil }
+        var restored = item
+        restored.project = value.project.flatMap { $0.isEmpty ? nil : $0 }
+        restored.projectIcon = value.projectIcon
+        return restored
+    }
+
     public var snapshot: ProgressSnapshot {
-        ProgressSnapshot(items: items.filter { !$0.completing }, dismissed: dismissed.sorted())
+        ProgressSnapshot(items: items.filter { !$0.completing }, dismissed: dismissed.sorted(), history: history)
+    }
+
+    public var revealedHistory: [ProgressItem] {
+        history.filter { revealedHistoryIDs.contains($0.id) }
+    }
+
+    /// Recalls one result per press, newest first, skipping cards still finishing onscreen.
+    @discardableResult
+    public func revealNextCompleted() -> Bool {
+        let liveIDs = Set(items.map(\.id))
+        guard let item = history.first(where: { !visitedHistoryIDs.contains($0.id) && !liveIDs.contains($0.id) }) else {
+            return false
+        }
+        visitedHistoryIDs.insert(item.id)
+        revealedHistoryIDs.insert(item.id)
+        return true
+    }
+
+    /// Hiding results never deletes their history; the next recall starts at the newest again.
+    public func clearCompleted() {
+        items.removeAll { $0.completing }
+        revealedHistoryIDs.removeAll()
+        visitedHistoryIDs.removeAll()
     }
 
     /// Returns true exactly once when an item enters its completion animation.
@@ -104,12 +149,20 @@ public final class ProgressRegistry {
             if let project = value.project { items[index].project = project.isEmpty ? nil : project }
             if let projectIcon = value.projectIcon { items[index].projectIcon = projectIcon }
             if value.project?.isEmpty == true { items[index].projectIcon = nil }
+            if items[index].completing {
+                items[index].completedAt = now
+                history.insert(items[index], at: 0)
+                history = Array(history.prefix(Self.historyLimit))
+                let ids = Set(history.map(\.id))
+                revealedHistoryIDs.formIntersection(ids)
+                visitedHistoryIDs.formIntersection(ids)
+            }
             return items[index].completing
         }
         // Unknown completions are no-ops, so retries cannot create phantom notifications.
         guard value.progress < 100 else { return false }
         guard items.count < 50 else { throw APIError(409, "At most 50 active items are supported") }
-        items.append(ProgressItem(id: UUID(), name: value.name, progress: value.progress,
+        items.append(ProgressItem(id: UUID(), name: value.name, createdAt: now, completedAt: nil, progress: value.progress,
                                   expectedFinish: now.addingTimeInterval(value.etaSeconds), completing: false,
                                   project: value.project.flatMap { $0.isEmpty ? nil : $0 },
                                   projectIcon: value.projectIcon))
@@ -126,5 +179,13 @@ public final class ProgressRegistry {
 
     public func removeCompleted(id: UUID) {
         items.removeAll { $0.id == id && $0.completing }
+    }
+
+    public func dismiss(id: UUID) {
+        if let item = items.first(where: { $0.id == id }) {
+            dismiss(name: item.name)
+        } else {
+            revealedHistoryIDs.remove(id)
+        }
     }
 }

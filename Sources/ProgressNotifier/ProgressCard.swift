@@ -41,16 +41,38 @@ private func added(_ date: Date?, now: Date) -> String {
     return "Added \(value) \(unit)\(value == 1 ? "" : "s") ago"
 }
 
+// Light-mode accents need enough contrast against the white panel, rather than
+// sharing the luminous mint colors used on dark material.
+private struct ProgressPalette {
+    let colorScheme: ColorScheme
+
+    var accent: Color {
+        colorScheme == .light ? Color(red: 0.04, green: 0.43, blue: 0.37) : .mint
+    }
+
+    func progress(completing: Bool) -> Color {
+        if colorScheme == .light {
+            return completing ? Color(red: 0.09, green: 0.45, blue: 0.28) : accent
+        }
+        return completing ? .green : Color(red: 0.23, green: 0.72, blue: 0.64)
+    }
+}
+
 private struct ItemProgressBar: View {
     let item: ProgressItem
 
-    private var tint: Color { item.completing ? .green : Color(red: 0.23, green: 0.72, blue: 0.64) }
+    @Environment(\.colorScheme) private var colorScheme
+    private var palette: ProgressPalette { ProgressPalette(colorScheme: colorScheme) }
+    private var tint: Color { palette.progress(completing: item.completing) }
 
     var body: some View {
         GeometryReader { proxy in
-            Capsule().fill(tint.opacity(0.13))
+            Capsule().fill(colorScheme == .light ? Color.black.opacity(0.12) : tint.opacity(0.13))
                 .overlay(alignment: .leading) {
                     Capsule().fill(tint).frame(width: proxy.size.width * item.progress / 100)
+                }
+                .overlay {
+                    Capsule().strokeBorder(Color.black.opacity(colorScheme == .light ? 0.16 : 0), lineWidth: 0.5)
                 }
         }
         .frame(height: 5)
@@ -132,19 +154,21 @@ private func updateAge(_ date: Date, now: Date) -> String {
 private struct SnapshotMeter: View {
     let progress: Double
     var current = false
+    @Environment(\.colorScheme) private var colorScheme
+    private var palette: ProgressPalette { ProgressPalette(colorScheme: colorScheme) }
 
     var body: some View {
         HStack(spacing: 8) {
             GeometryReader { proxy in
-                Capsule().fill(Color.mint.opacity(0.13))
+                Capsule().fill(palette.accent.opacity(0.13))
                     .overlay(alignment: .leading) {
-                        Capsule().fill(Color.mint.opacity(current ? 1 : 0.55))
+                        Capsule().fill(palette.accent.opacity(current ? 1 : 0.55))
                             .frame(width: proxy.size.width * progress / 100)
                     }
             }.frame(height: 4)
             Text("\(progress, specifier: "%.0f")%")
                 .font(.system(size: 11, weight: .medium)).monospacedDigit()
-                .foregroundStyle(Color.mint.opacity(current ? 1 : 0.7))
+                .foregroundStyle(palette.accent.opacity(current ? 1 : 0.7))
                 .frame(width: 34, alignment: .trailing)
         }
         .frame(height: 14)
@@ -159,12 +183,14 @@ private struct SnapshotRow: View {
     let now: Date
     var latest = false
     var showMeter = true
+    @Environment(\.colorScheme) private var colorScheme
+    private var palette: ProgressPalette { ProgressPalette(colorScheme: colorScheme) }
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             Text(updateAge(entry.recordedAt, now: now))
                 .font(.system(size: 9, weight: latest ? .medium : .regular)).monospacedDigit()
-                .foregroundStyle(latest ? Color.mint : Color.secondary)
+                .foregroundStyle(latest ? palette.accent : Color.secondary)
                 .frame(width: 30, alignment: .leading).padding(.top, 2)
                 .accessibilityLabel(entry.recordedAt.formatted(date: .abbreviated, time: .standard))
             VStack(alignment: .leading, spacing: 7) {
@@ -192,7 +218,9 @@ private struct ItemCard: View {
     let panelFocused: Bool
     let updatesUnfolded: Bool
 
-    private var tint: Color { item.completing ? .green : Color(red: 0.23, green: 0.72, blue: 0.64) }
+    @Environment(\.colorScheme) private var colorScheme
+    private var palette: ProgressPalette { ProgressPalette(colorScheme: colorScheme) }
+    private var tint: Color { palette.progress(completing: item.completing) }
     private var detailOpacity: Double { Double(max(0, (expansion - 0.25) / 0.75)) }
     private var timing: String {
         let estimate = item.completing ? "Complete" : remaining(item.expectedFinish.timeIntervalSince(now))
@@ -316,10 +344,10 @@ private struct ItemCard: View {
                               scale: 1 + 0.035 * expansion))
         .overlay {
             RoundedRectangle(cornerRadius: blend(4, 12, expansion))
-                .fill(Color.mint.opacity(selected ? 0.055 * Double(expansion) : 0))
+                .fill(palette.accent.opacity(selected ? 0.055 * Double(expansion) : 0))
                 .overlay {
                     RoundedRectangle(cornerRadius: blend(4, 12, expansion))
-                        .strokeBorder(Color.mint.opacity(selected ? (panelFocused ? 0.9 : 0.6) * Double(expansion) : 0))
+                        .strokeBorder(palette.accent.opacity(selected ? (panelFocused ? 0.9 : 0.6) * Double(expansion) : 0))
                 }
                 .allowsHitTesting(false)
         }
@@ -345,6 +373,8 @@ struct ProgressCard: View {
     let close: () -> Void
     @State private var buttonFrames: [CGRect] = []
     @State private var focusScrollGeneration = 0
+    @Environment(\.colorScheme) private var colorScheme
+    private var palette: ProgressPalette { ProgressPalette(colorScheme: colorScheme) }
 
     private var expansion: CGFloat { presentation.expansion }
     private var runningCount: Int { model.items.filter { !$0.completing }.count }
@@ -435,13 +465,22 @@ struct ProgressCard: View {
         .padding(.horizontal, Self.horizontalInset(expansion: expansion))
         .padding(.vertical, Self.verticalInset(expansion: expansion))
         .frame(width: blend(200, 350, expansion))
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
-        .overlay(RoundedRectangle(cornerRadius: 20).fill(Color.mint.opacity(model.isFocused ? 0.06 * Double(expansion) : 0))
+        .background {
+            RoundedRectangle(cornerRadius: 20).fill(.regularMaterial)
+                .overlay {
+                    // Keep dark windows and games from turning light mode gray.
+                    if colorScheme == .light {
+                        RoundedRectangle(cornerRadius: 20).fill(Color.white.opacity(0.94))
+                    }
+                }
+        }
+        .overlay(RoundedRectangle(cornerRadius: 20).fill(palette.accent.opacity(model.isFocused ? 0.06 * Double(expansion) : 0))
             .allowsHitTesting(false))
         .overlay(RoundedRectangle(cornerRadius: 20)
-            .strokeBorder(model.isFocused ? Color.mint.opacity(0.9) : .primary.opacity(0.08),
-                          lineWidth: model.isFocused ? 2 : 1)
-            .opacity(Double(expansion)))
+            .strokeBorder(model.isFocused && expansion > 0 ? palette.accent.opacity(0.9) : .primary.opacity(colorScheme == .light ? 0.22 : 0.08),
+                          lineWidth: model.isFocused ? 1 + expansion : 1)
+            .opacity(colorScheme == .light ? 1 : Double(expansion))
+            .allowsHitTesting(false))
         // A single, fixed-size control stays anchored to the same corner in both modes.
         .overlay(alignment: .topTrailing) {
             Button(action: close) {
@@ -496,7 +535,7 @@ struct ProgressCard: View {
         VStack(spacing: 8 * expansion) {
             Image(systemName: "checkmark.circle")
                 .font(.system(size: blend(16, 26, expansion), weight: .light))
-                .foregroundStyle(.mint)
+                .foregroundStyle(palette.accent)
             Text("No progress").font(.system(size: 14, weight: .medium))
                 .frame(height: 17 * expansion).opacity(Double(expansion)).clipped()
             Text(model.hasHistory ? "Press H to recall a completed result" : "Waiting for tasks…")

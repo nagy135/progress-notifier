@@ -189,13 +189,6 @@ struct ProgressCard: View {
 
     private var controls: some View {
         HStack(spacing: compact ? 2 : 4) {
-            Button(action: toggleCompact) {
-                Image(systemName: compact ? "arrow.up.left.and.arrow.down.right" : "minus")
-                    .frame(width: compact ? 20 : 24, height: compact ? 20 : 24)
-            }
-            .help(compact ? "Expand progress" : "Minimize progress")
-            .accessibilityLabel(compact ? "Expand progress" : "Minimize progress")
-            .modifier(ExcludeFromToggle())
             Button(action: close) {
                 Image(systemName: "xmark").frame(width: compact ? 20 : 24, height: compact ? 20 : 24)
             }

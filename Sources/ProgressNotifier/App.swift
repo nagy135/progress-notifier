@@ -17,6 +17,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var keyboardMonitor: Any?
     private var windowHidden = false
     private var compact = UserDefaults.standard.bool(forKey: "compactMode")
+    private let presentation = ProgressPresentation(compact: UserDefaults.standard.bool(forKey: "compactMode"))
+    private var resizeTimer: Timer?
     private var expandedContentHeight: CGFloat?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -111,8 +113,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private func toggleCompact() {
-        compact.toggle()
+        setCompact(!compact)
+    }
+
+    private func setCompact(_ compact: Bool) {
+        self.compact = compact
         UserDefaults.standard.set(compact, forKey: "compactMode")
+        resizeTimer?.invalidate()
+        resizeTimer = nil
+        let target: CGFloat = compact ? 0 : 1
+        let start = presentation.expansion
+        guard panel?.isVisible == true, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+              abs(target - start) > 0.001 else {
+            presentation.expansion = target
+            refreshPanel()
+            return
+        }
+        let startedAt = ProcessInfo.processInfo.systemUptime
+        let duration = ProgressCard.transitionDuration * Double(max(0.25, abs(target - start)))
+        let timer = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] timer in
+            guard let self else { timer.invalidate(); return }
+            let elapsed = ProcessInfo.processInfo.systemUptime - startedAt
+            let fraction = min(1, elapsed / duration)
+            let eased = fraction * fraction * (3 - 2 * fraction)
+            // One clock drives both SwiftUI geometry and the native window, including reversals.
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                self.presentation.expansion = start + (target - start) * CGFloat(eased)
+                self.resizePanel()
+            }
+            if fraction >= 1 {
+                timer.invalidate()
+                self.resizeTimer = nil
+            }
+        }
+        resizeTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
         refreshPanel()
     }
 
@@ -129,8 +166,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     @objc private func recallCompleted() {
         guard model.recallCompleted() else { return }
-        compact = false
-        UserDefaults.standard.set(false, forKey: "compactMode")
+        setCompact(false)
         showProgress()
     }
 
@@ -143,9 +179,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let screen = panel.screen ?? NSScreen.main ?? NSScreen.screens.first
         guard let screen else { return }
         let maximumHeight = max(160, screen.visibleFrame.height - 48)
-        let wasVisible = panel.isVisible
         let hosting = panel.contentView as? NSHostingView<ProgressCard>
-        let root = ProgressCard(model: model, maximumHeight: maximumHeight, compact: compact,
+        let root = ProgressCard(model: model, presentation: presentation, maximumHeight: maximumHeight,
                                 expandedContentHeight: expandedContentHeight,
                                 contentHeightChanged: { [weak self] height in
                                     guard let self, abs((self.expandedContentHeight ?? 0) - height) > 0.5 else { return }
@@ -160,21 +195,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             hosting.sizingOptions = []
             panel.contentView = hosting
         }
-        let height = compact ? ProgressCard.compactHeight(itemCount: model.displayItems.count, maximumHeight: maximumHeight)
-            : model.displayItems.isEmpty ? 100 + ProgressCard.expandedChromeHeight
-            : min((expandedContentHeight ?? CGFloat(model.displayItems.count) * 100 + 8) + ProgressCard.expandedChromeHeight, maximumHeight)
+        resizePanel(reposition: reposition)
+        panel.orderFrontRegardless()
+    }
+
+    private func resizePanel(reposition: Bool = false) {
+        guard let panel, !windowHidden,
+              let screen = panel.screen ?? NSScreen.main ?? NSScreen.screens.first else { return }
+        let maximumHeight = max(160, screen.visibleFrame.height - 48)
+        let height = ProgressCard.windowHeight(itemCount: model.displayItems.count,
+                                               expandedContentHeight: expandedContentHeight,
+                                               maximumHeight: maximumHeight,
+                                               expansion: presentation.expansion)
         var frame = panel.frame
         let rightEdge = frame.maxX
         frame.origin.y += frame.height - height
-        frame.size = NSSize(width: compact ? 216 : 370, height: height)
+        frame.size = NSSize(width: 220 + 150 * presentation.expansion, height: height)
         frame.origin.x = rightEdge - frame.width
-        if !wasVisible || reposition {
+        if !panel.isVisible || reposition {
             frame.origin = NSPoint(x: screen.visibleFrame.maxX - frame.width - 6,
                                    y: screen.visibleFrame.maxY - frame.height - 6)
         }
         frame.origin.y = max(screen.visibleFrame.minY, frame.origin.y)
         panel.setFrame(frame, display: true)
-        panel.orderFrontRegardless()
+        panel.contentView?.layoutSubtreeIfNeeded()
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -191,6 +235,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        resizeTimer?.invalidate()
         if let keyboardMonitor { NSEvent.removeMonitor(keyboardMonitor) }
         server.stop()
     }

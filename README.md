@@ -13,7 +13,7 @@ cd ~/Code/progress-notifier
 open 'build/Progress Notifier.app'
 ```
 
-Opening the app shows a floating panel and a menu bar icon. With no items it says “No progress”. Drag its background to move it. The panel grows with its content until it reaches the available screen height; only then does the stack scroll and show a scrollbar. Recalling, clearing, dismissing, and adding cards use the same smooth resize as mode changes, including when a transition is reversed. Click anywhere except an X, or press M, to toggle between the full list and a compact list of icons and minimal progress bars, without a header or titles. Compact icons match the item's project icon; items without project metadata use a task-name monogram. The panel has no hover tooltips. A mint outline and tint indicate that the window has keyboard focus. Escape releases keyboard focus while leaving the panel visible. The panel grows and shrinks from its top-right corner in a 0.22-second transition, keeping the same close button, icons, and progress bars throughout. Switching modes does not flash items. Reduce Motion switches layouts immediately. Q, ⌘W, or the window's X hides the window while updates continue in the background. Updates keep it hidden until you open the app again or choose Show Progress from the menu bar. ⌘Q or the menu bar's Quit stops the app. Move the bundle to `/Applications` if desired. It is locally ad-hoc signed, not notarized.
+Opening the app shows a floating panel and a menu bar icon. With no items it says “No progress”. Drag its background to move it. The panel grows with its content until it reaches the available screen height; only then does the stack scroll and show a scrollbar. Recalling, clearing, dismissing, and adding cards use the same smooth resize as mode changes, including when a transition is reversed. Click anywhere except an X, or press M, to toggle between the full list and a compact list of icons and minimal progress bars, without a header or titles. Compact icons match the item's project icon; items without project metadata use a task-name monogram. The panel has no hover tooltips. In expanded mode, a mint outline and tint indicate that the window has keyboard focus; compact mode has no border or focus tint. Escape releases keyboard focus while leaving the panel visible. The panel grows and shrinks from its top-right corner in a 0.22-second transition, keeping the same close button, icons, and progress bars throughout. Switching modes does not flash items. Reduce Motion switches layouts immediately. Q, ⌘W, or the window's X hides the window while updates continue in the background. Updates keep it hidden until you open the app again or choose Show Progress from the menu bar. ⌘Q or the menu bar's Quit stops the app. Move the bundle to `/Applications` if desired. It is locally ad-hoc signed, not notarized.
 
 ## Send progress
 
@@ -73,9 +73,9 @@ is hidden when no earlier descriptions are available.
 The indicator disappears while that task’s description ledger is unfolded. Press **D**
 while the panel has focus, or click **Show updates**,
 to unfold the ledger for the **focused task only**. Select the next task with Down or
-J, and the previous task with Up or K. A mint outline marks selection in both expanded
-and compact modes, with a stronger fill and outline in compact mode. Switching modes
-keeps the panel focused so arrow and J/K navigation continues working. Navigation stops at the first and last tasks. Progress updates and
+J, and the previous task with Up or K. A mint outline marks selection in expanded mode.
+Compact mode has no borders or selected task, and Up/Down and J/K do nothing there.
+Expanding restores the previous selection. Navigation stops at the first and last tasks. Progress updates and
 new tasks keep the same selection; removing the focused task selects its next neighbor,
 or the previous one when it was last.
 
@@ -86,7 +86,7 @@ and moving focus preserves the other ledgers. If any are folded, Shift+D opens a
 With a single ledger opened using D, moving focus folds the old row and reveals the
 newly focused task's history. Keyboard
 navigation keeps the selected task in view. D from compact mode expands the panel and
-shows the focused ledger; Shift+D also expands compact mode and toggles all ledgers. M preserves selection and the ledger setting; D does not
+shows the previously focused ledger; Shift+D also expands compact mode and toggles all ledgers. M preserves selection and the ledger setting; D does not
 change H/C completed-task history. Update details start folded after relaunch.
 
 Each described update is a snapshot of the task's overall progress, not a separate

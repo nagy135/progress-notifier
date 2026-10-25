@@ -17,7 +17,8 @@ final class ProgressPresentation: ObservableObject {
     @Published private(set) var rows: [Row] = []
     @Published private(set) var emptyPresence: CGFloat = 1
     @Published private(set) var expandedItemIDs: Set<UUID> = []
-    @Published private(set) var focusedItemID: UUID?
+    @Published private var rememberedItemID: UUID?
+    @Published private(set) var isCompact: Bool
     @Published private(set) var updatesControlPresence: CGFloat = 0
     @Published var maximumHeight: CGFloat = 800
     var geometryChanged: (() -> Void)?
@@ -29,6 +30,7 @@ final class ProgressPresentation: ObservableObject {
     private var updatesFollowFocus = false
 
     init(compact: Bool) {
+        isCompact = compact
         expansion = compact ? 0 : 1
         targetExpansion = compact ? 0 : 1
     }
@@ -54,14 +56,15 @@ final class ProgressPresentation: ObservableObject {
     var needsScrolling: Bool { naturalContentHeight > maximumHeight - chromeHeight + 0.5 }
 
     func update(items: [ProgressItem], compact: Bool, animated: Bool) {
-        let previousIndex = desiredItems.firstIndex(where: { $0.id == focusedItemID }) ?? 0
+        isCompact = compact
+        let previousIndex = desiredItems.firstIndex(where: { $0.id == rememberedItemID }) ?? 0
         desiredItems = items
-        if !items.contains(where: { $0.id == focusedItemID }) {
-            focusedItemID = items.isEmpty ? nil : items[min(previousIndex, items.count - 1)].id
+        if !items.contains(where: { $0.id == rememberedItemID }) {
+            rememberedItemID = items.isEmpty ? nil : items[min(previousIndex, items.count - 1)].id
         }
         expandedItemIDs.formIntersection(items.map(\.id))
-        if updatesFollowFocus, let focusedItemID {
-            expandedItemIDs = [focusedItemID]
+        if updatesFollowFocus, let rememberedItemID {
+            expandedItemIDs = [rememberedItemID]
         }
         if items.isEmpty { updatesFollowFocus = false }
         targetExpansion = compact ? 0 : 1
@@ -88,16 +91,17 @@ final class ProgressPresentation: ObservableObject {
         animate(animated: animated)
     }
 
+    var focusedItemID: UUID? { isCompact ? nil : rememberedItemID }
     var focusedItem: ProgressItem? { desiredItems.first { $0.id == focusedItemID } }
     var showsUpdates: Bool { focusedItemID.map { expandedItemIDs.contains($0) } ?? false }
     func showsUpdates(for id: UUID) -> Bool { expandedItemIDs.contains(id) }
 
     func moveFocus(by offset: Int, animated: Bool) {
-        guard !desiredItems.isEmpty else { return }
+        guard !isCompact, !desiredItems.isEmpty else { return }
         let current = desiredItems.firstIndex(where: { $0.id == focusedItemID }) ?? 0
         let next = min(max(0, current + offset), desiredItems.count - 1)
         guard desiredItems[next].id != focusedItemID else { return }
-        focusedItemID = desiredItems[next].id
+        rememberedItemID = desiredItems[next].id
         // A single inspector follows selection; globally opened ledgers keep their state.
         if updatesFollowFocus {
             expandedItemIDs = [desiredItems[next].id]

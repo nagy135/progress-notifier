@@ -131,8 +131,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private func toggleCompact() {
-        // Compact rows have no focusable controls. A background click must still
-        // leave the panel key so Up/Down and J/K continue to reach the local monitor.
+        // Keep mode and history shortcuts available after a background click.
         panel?.makeKeyAndOrderFront(nil)
         setCompact(!compact)
     }
@@ -161,25 +160,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     @objc private func toggleUpdates() {
+        let wasCompact = compact
+        if compact { setCompact(false) }
         guard presentation.focusedItemID != nil else { return }
-        let shown = !presentation.showsUpdates
-        if compact {
-            compact = false
-            UserDefaults.standard.set(false, forKey: "compactMode")
-            // D from compact opens the ledger; further presses only fold its history.
-            presentation.setShowsUpdates(true, animated: panel?.isVisible == true)
-        } else {
-            presentation.setShowsUpdates(shown, animated: panel?.isVisible == true)
-        }
+        // D from compact opens the remembered ledger; further presses fold its history.
+        presentation.setShowsUpdates(wasCompact || !presentation.showsUpdates, animated: panel?.isVisible == true)
         refreshPanel()
     }
 
     @objc private func toggleAllUpdates() {
+        if compact { setCompact(false) }
         guard presentation.focusedItemID != nil else { return }
-        if compact {
-            compact = false
-            UserDefaults.standard.set(false, forKey: "compactMode")
-        }
         presentation.toggleAllUpdates(animated: panel?.isVisible == true)
         refreshPanel()
     }

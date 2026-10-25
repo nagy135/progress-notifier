@@ -42,6 +42,36 @@ final class TaskFocusTests: XCTestCase {
         XCTAssertEqual(presentation.focusedItemID, selected)
     }
 
+    func testCompactModeHasNoSelectionAndIgnoresNavigation() throws {
+        let items = try items()
+        let presentation = ProgressPresentation(compact: true)
+        presentation.update(items: items, compact: true, animated: false)
+        XCTAssertNil(presentation.focusedItemID)
+        XCTAssertNil(presentation.focusedItem)
+        presentation.moveFocus(by: 1, animated: false)
+        presentation.moveFocus(by: -1, animated: false)
+        presentation.update(items: items, compact: false, animated: false)
+        XCTAssertEqual(presentation.focusedItemID, items[0].id)
+    }
+
+    func testCollapsingImmediatelyDisablesSelectionAndRestoresLedgerOnExpansion() throws {
+        let items = try items()
+        let presentation = ProgressPresentation(compact: false)
+        presentation.update(items: items, compact: false, animated: false)
+        presentation.measure(Dictionary(uniqueKeysWithValues: items.map { ($0.id, CGFloat(60)) }), animated: false)
+        presentation.measureHistory(Dictionary(uniqueKeysWithValues: items.map { ($0.id, CGFloat(80)) }), animated: false)
+        presentation.moveFocus(by: 1, animated: false)
+        presentation.setShowsUpdates(true, animated: false)
+        presentation.update(items: items, compact: true, animated: true)
+        XCTAssertNil(presentation.focusedItemID)
+        presentation.moveFocus(by: 1, animated: true)
+        presentation.moveFocus(by: -1, animated: true)
+        XCTAssertEqual(presentation.expandedItemIDs, [items[1].id])
+        presentation.update(items: items, compact: false, animated: false)
+        XCTAssertEqual(presentation.focusedItemID, items[1].id)
+        XCTAssertEqual(presentation.rows.map(\.historyHeight), [0, 80, 0])
+    }
+
     func testRemovingFocusedTaskSelectsNextThenPreviousAndHandlesEmptyList() throws {
         let items = try items()
         let presentation = ProgressPresentation(compact: false)
@@ -82,12 +112,14 @@ final class TaskFocusTests: XCTestCase {
     func testTaskWithoutNotesDoesNotOpenAnotherTasksHistory() throws {
         var items = try items()
         items[1].updates = []
-        let presentation = ProgressPresentation(compact: true)
-        presentation.update(items: items, compact: true, animated: false)
+        let presentation = ProgressPresentation(compact: false)
+        presentation.update(items: items, compact: false, animated: false)
         presentation.measureHistory([items[0].id: 80, items[1].id: 0, items[2].id: 80], animated: false)
         presentation.setShowsUpdates(true, animated: false)
         presentation.moveFocus(by: 1, animated: false)
         XCTAssertEqual(presentation.rows.map(\.historyHeight), [0, 0, 0])
+        presentation.update(items: items, compact: true, animated: false)
+        XCTAssertNil(presentation.focusedItemID)
         presentation.update(items: items, compact: false, animated: false)
         XCTAssertEqual(presentation.focusedItemID, items[1].id)
         XCTAssertEqual(presentation.rows.map(\.historyHeight), [0, 0, 0])

@@ -65,6 +65,7 @@ private struct UpdatePulse: ViewModifier {
     let consumeUpdatePulse: () -> Bool
     let tint: Color
     let cornerRadius: CGFloat
+    let borderOpacity: Double
     var scale: CGFloat = 1.035
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var pulse = false
@@ -73,7 +74,7 @@ private struct UpdatePulse: ViewModifier {
     func body(content: Content) -> some View {
         content
             .overlay(RoundedRectangle(cornerRadius: cornerRadius).fill(tint.opacity(pulse ? 0.18 : 0)))
-            .overlay(RoundedRectangle(cornerRadius: cornerRadius).strokeBorder(tint.opacity(pulse ? 0.6 : 0)))
+            .overlay(RoundedRectangle(cornerRadius: cornerRadius).strokeBorder(tint.opacity(pulse ? 0.6 * borderOpacity : 0)))
             .brightness(pulse ? 0.12 : 0)
             .scaleEffect(pulse && !reduceMotion ? scale : 1)
             .onAppear { flashIfNeeded() }
@@ -311,14 +312,14 @@ private struct ItemCard: View {
         .background(.primary.opacity(0.035 * expansion), in: RoundedRectangle(cornerRadius: 12))
         .modifier(UpdatePulse(revision: revision, consumeUpdatePulse: consumeUpdatePulse,
                               tint: tint, cornerRadius: blend(4, 12, expansion),
+                              borderOpacity: Double(expansion),
                               scale: 1 + 0.035 * expansion))
         .overlay {
             RoundedRectangle(cornerRadius: blend(4, 12, expansion))
-                .fill(Color.mint.opacity(selected ? blend(0.18, 0.055, expansion) : 0))
+                .fill(Color.mint.opacity(selected ? 0.055 * Double(expansion) : 0))
                 .overlay {
                     RoundedRectangle(cornerRadius: blend(4, 12, expansion))
-                        .strokeBorder(Color.mint.opacity(selected ? (panelFocused ? 0.9 : 0.6) : 0),
-                                      lineWidth: blend(1.5, 1, expansion))
+                        .strokeBorder(Color.mint.opacity(selected ? (panelFocused ? 0.9 : 0.6) * Double(expansion) : 0))
                 }
                 .allowsHitTesting(false)
         }
@@ -435,11 +436,12 @@ struct ProgressCard: View {
         .padding(.vertical, Self.verticalInset(expansion: expansion))
         .frame(width: blend(200, 350, expansion))
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
-        .overlay(RoundedRectangle(cornerRadius: 20).fill(Color.mint.opacity(model.isFocused ? 0.06 : 0))
+        .overlay(RoundedRectangle(cornerRadius: 20).fill(Color.mint.opacity(model.isFocused ? 0.06 * Double(expansion) : 0))
             .allowsHitTesting(false))
         .overlay(RoundedRectangle(cornerRadius: 20)
             .strokeBorder(model.isFocused ? Color.mint.opacity(0.9) : .primary.opacity(0.08),
-                          lineWidth: model.isFocused ? 2 : 1))
+                          lineWidth: model.isFocused ? 2 : 1)
+            .opacity(Double(expansion)))
         // A single, fixed-size control stays anchored to the same corner in both modes.
         .overlay(alignment: .topTrailing) {
             Button(action: close) {

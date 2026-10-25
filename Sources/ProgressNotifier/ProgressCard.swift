@@ -189,6 +189,7 @@ private struct ItemCard: View {
     let historyHeight: CGFloat
     let selected: Bool
     let panelFocused: Bool
+    let updatesUnfolded: Bool
 
     private var tint: Color { item.completing ? .green : Color(red: 0.23, green: 0.72, blue: 0.64) }
     private var detailOpacity: Double { Double(max(0, (expansion - 0.25) / 0.75)) }
@@ -210,16 +211,9 @@ private struct ItemCard: View {
             Text(item.name).font(.system(size: 13, weight: .semibold))
                 .lineLimit(2).padding(.trailing, 30)
                 .padding(.leading, item.project == nil ? 22 : 0)
-            HStack(spacing: 4) {
-                Text(timing).lineLimit(1).minimumScaleFactor(0.8)
-                if !item.updates.isEmpty {
-                    Spacer(minLength: 4)
-                    Label(item.updates.count == 1 ? "1 update" : "\(item.updates.count) updates", systemImage: "text.alignleft")
-                        .font(.system(size: 10)).fixedSize()
-                }
-            }
-            .font(.system(size: latest == nil ? 11 : 10)).foregroundStyle(.secondary).monospacedDigit()
-            .padding(.leading, item.project == nil && latest == nil ? 22 : 0)
+            Text(timing).lineLimit(1).minimumScaleFactor(0.8)
+                .font(.system(size: latest == nil ? 11 : 10)).foregroundStyle(.secondary).monospacedDigit()
+                .padding(.leading, item.project == nil && latest == nil ? 22 : 0)
             if let latest {
                 SnapshotRow(entry: latest, now: now, latest: true, showMeter: !noteMatchesProgress)
                     .padding(.top, 8)
@@ -260,7 +254,21 @@ private struct ItemCard: View {
                 .accessibilityHidden(expansion < 0.5)
                 .padding(.bottom, 8 * expansion)
             HStack(spacing: 0) {
-                Color.clear.frame(width: blend(22, latest == nil || !noteMatchesProgress ? 0 : 38, expansion), height: 1)
+                Color.clear
+                    .frame(width: blend(22, latest == nil ? 0 : 38, expansion), height: 16)
+                    .overlay(alignment: .leading) {
+                        if latest != nil {
+                            HStack(spacing: 3) {
+                                Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold))
+                                Text("\(item.updates.count)").font(.system(size: 10, weight: .medium)).monospacedDigit()
+                            }
+                            .foregroundStyle(.secondary)
+                            .opacity(updatesUnfolded || historyHeight > 0.5 ? 0 : detailOpacity)
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel("\(item.updates.count) saved updates")
+                            .accessibilityHidden(updatesUnfolded || historyHeight > 0.5 || expansion < 0.5)
+                        }
+                    }
                 ItemProgressBar(item: item)
                 Text("\(item.progress, specifier: "%.0f")%")
                     .font(.system(size: 13, weight: .semibold, design: .rounded))
@@ -367,7 +375,8 @@ struct ProgressCard: View {
                                          now: context.date, expansion: expansion,
                                          dismiss: { model.dismiss(row.item) }, detailsHeight: row.detailsHeight,
                                          historyHeight: row.historyHeight,
-                                         selected: presentation.focusedItemID == row.id, panelFocused: model.isFocused)
+                                         selected: presentation.focusedItemID == row.id, panelFocused: model.isFocused,
+                                         updatesUnfolded: presentation.showsUpdates && presentation.focusedItemID == row.id)
                                     .frame(width: blend(144, Self.expandedRowWidth, expansion), alignment: .leading)
                                     .fixedSize(horizontal: false, vertical: true)
                                     .frame(height: presentation.rowHeight(row) * row.presence,

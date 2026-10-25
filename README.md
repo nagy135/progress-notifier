@@ -67,7 +67,9 @@ Send a short description of what just happened with a progress update:
 ```
 
 The default card shows the latest description, its timestamp, current progress, and the
-number of saved updates. Press **D** while the panel has focus, or click **Show updates**,
+number of saved updates as a down arrow and count to the left of the progress bar.
+The indicator disappears while that task’s description ledger is unfolded. Press **D**
+while the panel has focus, or click **Show updates**,
 to unfold the ledger for the **focused task only**. Select the next task with Down or
 J, and the previous task with Up or K. A mint outline marks selection in both expanded
 and compact modes. Navigation stops at the first and last tasks. Progress updates and

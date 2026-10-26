@@ -488,9 +488,9 @@ struct ProgressCard: View {
         .overlay(RoundedRectangle(cornerRadius: 20).fill(palette.accent.opacity(model.isFocused ? 0.06 * Double(expansion) : 0))
             .allowsHitTesting(false))
         .overlay(RoundedRectangle(cornerRadius: 20)
-            .strokeBorder(model.isFocused && expansion > 0 ? palette.accent.opacity(0.9) : .primary.opacity(colorScheme == .light ? 0.22 : 0.08),
+            .strokeBorder(model.isFocused ? palette.accent.opacity(0.9) : .primary.opacity(colorScheme == .light ? 0.22 : 0.08),
                           lineWidth: model.isFocused ? 1 + expansion : 1)
-            .opacity(colorScheme == .light ? 1 : Double(expansion))
+            .opacity(model.isFocused || colorScheme == .light ? 1 : Double(expansion))
             .allowsHitTesting(false))
         // A single, fixed-size control stays anchored to the same corner in both modes.
         .overlay(alignment: .topTrailing) {

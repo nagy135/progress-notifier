@@ -40,6 +40,13 @@ final class ProgressModel: ObservableObject {
     func close(_ item: ProgressItem) { registry.close(id: item.id); publish() }
 
     @discardableResult
+    func undoClose() -> ProgressItem? {
+        guard let item = registry.undoClose() else { return nil }
+        publish()
+        return item
+    }
+
+    @discardableResult
     func undoDeletion() -> ProgressItem? {
         guard let item = registry.deletions.last?.item, registry.undoDeletion() else { return nil }
         publish()

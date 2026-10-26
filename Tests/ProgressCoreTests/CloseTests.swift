@@ -2,6 +2,109 @@ import XCTest
 @testable import ProgressCore
 
 final class CloseTests: XCTestCase {
+    func testCloseAndBanStacksUndoIndependentlyInLIFOOrderAcrossRelaunch() throws {
+        let registry = ProgressRegistry()
+        for name in ["First", "Banned", "Last"] {
+            try registry.update(.init(name: name, progress: 25, etaSeconds: 60, description: "Started"))
+        }
+        let ids = registry.items.map(\.id)
+        registry.close(id: ids[0])
+        registry.dismiss(id: ids[1])
+        registry.close(id: ids[2])
+        registry.close(id: ids[2]) // Closing twice must not create another entry.
+        let snapshot = try JSONDecoder().decode(ProgressSnapshot.self, from: JSONEncoder().encode(registry.snapshot))
+        let restored = ProgressRegistry(snapshot: snapshot)
+        XCTAssertTrue(restored.visibleItems.isEmpty)
+        XCTAssertEqual(restored.undoClose()?.id, ids[2])
+        XCTAssertEqual(restored.deletions.map(\.item.id), [ids[1]])
+        try restored.update(.init(name: "Banned", progress: 75, etaSeconds: 0))
+        XCTAssertEqual(restored.visibleItems.map(\.id), [ids[2]])
+        XCTAssertTrue(restored.undoDeletion())
+        XCTAssertEqual(restored.closures.map(\.item.id), [ids[0]])
+        XCTAssertEqual(restored.undoClose()?.id, ids[0])
+        XCTAssertEqual(restored.visibleItems.map(\.id), ids)
+        XCTAssertEqual(restored.visibleItems[1].progress, 25)
+        XCTAssertNil(restored.undoClose())
+        XCTAssertFalse(restored.undoDeletion())
+    }
+
+    func testUpdatesAndRecallRemoveAlreadyReopenedCardsFromCloseStack() throws {
+        let registry = ProgressRegistry()
+        for name in ["First", "Last"] {
+            try registry.update(.init(name: name, progress: 25, etaSeconds: 60))
+        }
+        let ids = registry.items.map(\.id)
+        registry.close(id: ids[0])
+        registry.close(id: ids[1])
+        try registry.update(.init(name: "Last", progress: 50, etaSeconds: 30))
+        XCTAssertEqual(registry.closures.map(\.item.id), [ids[0]])
+        XCTAssertEqual(registry.undoClose()?.id, ids[0], "Skip the task its update already reopened")
+        XCTAssertNil(registry.undoClose())
+        registry.close(id: ids[0])
+        try registry.update(.init(name: "First", progress: 100, etaSeconds: 0))
+        XCTAssertTrue(registry.closures.isEmpty)
+        registry.close(id: ids[0])
+        XCTAssertEqual(registry.undoClose()?.id, ids[0])
+        registry.removeCompleted(id: ids[0])
+        XCTAssertEqual(registry.revealedHistory.map(\.id), [ids[0]])
+        registry.close(id: ids[0])
+        XCTAssertTrue(registry.revealNextCompleted())
+        XCTAssertTrue(registry.closures.isEmpty)
+        XCTAssertNil(registry.undoClose())
+    }
+
+    func testBanningClosedTaskCannotBeUndoneByCloseUndo() throws {
+        let registry = ProgressRegistry()
+        try registry.update(.init(name: "Build", progress: 25, etaSeconds: 60))
+        let id = try XCTUnwrap(registry.items.first?.id)
+        registry.close(id: id)
+        registry.dismiss(name: "Build")
+        XCTAssertNil(registry.undoClose())
+        try registry.update(.init(name: "Build", progress: 50, etaSeconds: 30))
+        XCTAssertTrue(registry.visibleItems.isEmpty)
+        XCTAssertTrue(registry.undoDeletion())
+        XCTAssertEqual(registry.visibleItems.map(\.id), [id])
+        XCTAssertNil(registry.undoClose())
+    }
+
+    func testUndoClosedCompletionSurvivesHistoryTrimmingAndANewRunWithSameName() throws {
+        let registry = ProgressRegistry()
+        try registry.update(.init(name: "Build", progress: 25, etaSeconds: 60))
+        try registry.update(.init(name: "Build", progress: 100, etaSeconds: 0))
+        let id = try XCTUnwrap(registry.items.first?.id)
+        registry.close(id: id)
+        registry.removeCompleted(id: id)
+        for index in 0..<ProgressRegistry.historyLimit {
+            let name = "Done \(index)"
+            try registry.update(.init(name: name, progress: 25, etaSeconds: 60))
+            try registry.update(.init(name: name, progress: 100, etaSeconds: 0))
+            registry.removeCompleted(id: try XCTUnwrap(registry.items.first?.id))
+        }
+        XCTAssertFalse(registry.history.contains(where: { $0.id == id }))
+        try registry.update(.init(name: "Build", progress: 10, etaSeconds: 60))
+        let activeID = try XCTUnwrap(registry.items.first?.id)
+        let snapshot = try JSONDecoder().decode(ProgressSnapshot.self, from: JSONEncoder().encode(registry.snapshot))
+        let restored = ProgressRegistry(snapshot: snapshot)
+        restored.clearCompleted()
+        XCTAssertEqual(restored.undoClose()?.id, id)
+        XCTAssertEqual(restored.revealedHistory.map(\.id), [id])
+        XCTAssertEqual(restored.visibleItems.map(\.id), [activeID])
+        XCTAssertEqual(restored.history.count, ProgressRegistry.historyLimit)
+        XCTAssertTrue(restored.deletions.isEmpty)
+    }
+
+    func testPreviouslyClosedActiveCardsCanBeUndoneWithoutANewSnapshotField() throws {
+        let registry = ProgressRegistry()
+        try registry.update(.init(name: "Build", progress: 25, etaSeconds: 60))
+        let id = try XCTUnwrap(registry.items.first?.id)
+        registry.close(id: id)
+        var snapshot = registry.snapshot
+        snapshot.closures = nil // State written before Shift+Z existed.
+        let restored = ProgressRegistry(snapshot: snapshot)
+        XCTAssertEqual(restored.undoClose()?.id, id)
+        XCTAssertEqual(restored.visibleItems.map(\.id), [id])
+    }
+
     func testClosePersistsWithoutBanningAndNextUpdateRestoresTheSameTask() throws {
         let registry = ProgressRegistry()
         try registry.update(.init(name: "Build", progress: 25, etaSeconds: 60, description: "Started"))

@@ -115,9 +115,15 @@ public struct ProgressSnapshot: Codable {
     public let history: [ProgressItem]?
     public var deletions: [ProgressDeletion]? = nil
     public var closedItemIDs: [UUID]? = nil
+    public var closures: [ProgressClosure]? = nil
 }
 
 public struct ProgressDeletion: Codable {
+    public let item: ProgressItem
+    public let index: Int
+}
+
+public struct ProgressClosure: Codable {
     public let item: ProgressItem
     public let index: Int
 }
@@ -133,6 +139,7 @@ public final class ProgressRegistry {
     private var dismissed = Set<String>()
     private var closedItemIDs = Set<UUID>()
     public private(set) var deletions: [ProgressDeletion] = []
+    public private(set) var closures: [ProgressClosure] = []
     public init(snapshot: ProgressSnapshot? = nil) {
         guard let snapshot else { return }
         var names = Set<String>()
@@ -159,6 +166,20 @@ public final class ProgressRegistry {
             }
             deletions.append(ProgressDeletion(item: item, index: deletion.index))
         }
+        let bannedIDs = Set(deletions.map(\.item.id))
+        var closureIDs = Set<UUID>()
+        for closure in snapshot.closures ?? [] {
+            guard let item = Self.restored(closure.item), closure.index >= 0,
+                  !bannedIDs.contains(item.id),
+                  item.completing ? item.progress == 100 : items.contains(where: { $0.id == item.id }),
+                  closureIDs.insert(item.id).inserted else { continue }
+            closures.append(ProgressClosure(item: item, index: closure.index))
+            if !item.completing { closedItemIDs.insert(item.id) }
+        }
+        // Older snapshots saved hidden active IDs without their close order.
+        for (index, item) in items.enumerated() where closedItemIDs.contains(item.id) && !closureIDs.contains(item.id) {
+            closures.append(ProgressClosure(item: item, index: index))
+        }
     }
 
     private static func restored(_ item: ProgressItem) -> ProgressItem? {
@@ -184,7 +205,8 @@ public final class ProgressRegistry {
 
     public var snapshot: ProgressSnapshot {
         ProgressSnapshot(items: items.filter { !$0.completing }, dismissed: dismissed.sorted(), history: history,
-                         deletions: deletions, closedItemIDs: closedItemIDs.sorted { $0.uuidString < $1.uuidString })
+                         deletions: deletions, closedItemIDs: closedItemIDs.sorted { $0.uuidString < $1.uuidString },
+                         closures: closures)
     }
 
     public var visibleItems: [ProgressItem] {
@@ -204,6 +226,7 @@ public final class ProgressRegistry {
         }
         visitedHistoryIDs.insert(item.id)
         revealedHistoryIDs.insert(item.id)
+        closures.removeAll { $0.item.id == item.id }
         return true
     }
 
@@ -226,6 +249,7 @@ public final class ProgressRegistry {
         if let index = items.firstIndex(where: { $0.name == value.name }) {
             guard !items[index].completing else { return false }
             closedItemIDs.remove(items[index].id)
+            closures.removeAll { $0.item.id == items[index].id }
             items[index].progress = value.progress
             items[index].expectedFinish = now.addingTimeInterval(value.etaSeconds)
             items[index].completing = value.progress == 100
@@ -280,13 +304,40 @@ public final class ProgressRegistry {
 
     /// Close only the current card. The next accepted update shows the same task again.
     public func close(id: UUID) {
-        if items.contains(where: { $0.id == id && !$0.completing }) {
+        if let index = items.firstIndex(where: { $0.id == id && !$0.completing }) {
+            guard !closedItemIDs.contains(id) else { return }
+            closures.append(ProgressClosure(item: items[index], index: index))
             closedItemIDs.insert(id)
-        } else {
+        } else if let index = history.firstIndex(where: { $0.id == id }), revealedHistoryIDs.contains(id) {
+            closures.append(ProgressClosure(item: history[index], index: index))
             items.removeAll { $0.id == id && $0.completing }
             revealedHistoryIDs.remove(id)
             visitedHistoryIDs.remove(id)
         }
+    }
+
+    /// Restores closed cards only. Updates and H recall consume their close entries.
+    @discardableResult
+    public func undoClose() -> ProgressItem? {
+        while let closure = closures.popLast() {
+            let item = closure.item
+            if item.completing {
+                if !history.contains(where: { $0.id == item.id }) {
+                    history.insert(item, at: min(closure.index, history.count, Self.historyLimit - 1))
+                    history = Array(history.prefix(Self.historyLimit))
+                    let ids = Set(history.map(\.id))
+                    revealedHistoryIDs.formIntersection(ids)
+                    visitedHistoryIDs.formIntersection(ids)
+                }
+                revealedHistoryIDs.insert(item.id)
+                visitedHistoryIDs.insert(item.id)
+                return item
+            }
+            if let current = items.first(where: { $0.id == item.id }), closedItemIDs.remove(item.id) != nil {
+                return current
+            }
+        }
+        return nil
     }
 
     public func dismiss(id: UUID) {
@@ -301,6 +352,7 @@ public final class ProgressRegistry {
             index = historyIndex
         } else { return }
         deletions.append(ProgressDeletion(item: item, index: index))
+        closures.removeAll { $0.item.id == id }
         closedItemIDs.remove(id)
         items.removeAll { $0.id == id }
         history.removeAll { $0.id == id }

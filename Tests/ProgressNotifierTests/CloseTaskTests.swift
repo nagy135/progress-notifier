@@ -3,6 +3,37 @@ import ProgressCore
 @testable import ProgressNotifier
 
 final class CloseTaskTests: XCTestCase {
+    func testUndoCloseRestoresPersistedActiveAndCompletedCardsWithoutEffectsOrUnbanning() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let registry = ProgressRegistry()
+        for name in ["Closed", "Banned", "Completed"] {
+            try registry.update(.init(name: name, progress: 25, etaSeconds: 60, description: "Started"))
+        }
+        let ids = registry.items.map(\.id)
+        registry.close(id: ids[0])
+        registry.dismiss(id: ids[1])
+        try registry.update(.init(name: "Completed", progress: 100, etaSeconds: 0))
+        registry.close(id: ids[2])
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let stateURL = directory.appendingPathComponent("state.json")
+        try JSONEncoder().encode(registry.snapshot).write(to: stateURL)
+        var feedback = 0
+        let model = ProgressModel(stateURL: stateURL, completionFeedback: { feedback += 1 })
+        XCTAssertTrue(model.displayItems.isEmpty)
+        XCTAssertEqual(model.undoClose()?.id, ids[2])
+        XCTAssertEqual(model.displayItems.map(\.id), [ids[2]])
+        XCTAssertFalse(model.consumeUpdatePulse(for: try XCTUnwrap(model.displayItems.first)))
+        let relaunched = ProgressModel(stateURL: stateURL, completionFeedback: { feedback += 1 })
+        XCTAssertEqual(relaunched.undoClose()?.id, ids[0])
+        XCTAssertEqual(relaunched.displayItems.map(\.id), [ids[0]])
+        XCTAssertEqual(relaunched.displayItems.first?.updates.map(\.description), ["Started"])
+        XCTAssertFalse(relaunched.consumeUpdatePulse(for: try XCTUnwrap(relaunched.displayItems.first)))
+        XCTAssertNil(relaunched.undoClose())
+        XCTAssertEqual(relaunched.undoDeletion()?.id, ids[1])
+        XCTAssertEqual(feedback, 0)
+    }
+
     func testCloseHidesCardUntilHTTPUpdateAndKeepsNotesAndCompletionFeedback() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }

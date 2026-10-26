@@ -87,7 +87,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             case "h": self.recallCompleted(); return nil
             case "c": self.model.clearCompleted(); return nil
             case "z":
-                if !event.isARepeat { self.closeFocusedTask() }
+                if !event.isARepeat {
+                    if event.modifierFlags.contains(.shift) { self.undoClose() }
+                    else { self.closeFocusedTask() }
+                }
                 return nil
             case "x":
                 if !event.isARepeat {
@@ -182,6 +185,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let close = NSMenuItem(title: "Close Focused Task (Z)", action: #selector(closeFocusedTask), keyEquivalent: "")
         close.target = self
         menu.addItem(close)
+        let undoClose = NSMenuItem(title: "Undo Task Close (Shift+Z)", action: #selector(undoClose), keyEquivalent: "")
+        undoClose.target = self
+        menu.addItem(undoClose)
         let delete = NSMenuItem(title: "Delete Focused Task (X)", action: #selector(deleteFocusedTask), keyEquivalent: "")
         delete.target = self
         menu.addItem(delete)
@@ -218,6 +224,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     @objc private func closeFocusedTask() {
         guard let item = presentation.focusedItem else { return }
         model.close(item)
+    }
+
+    @objc private func undoClose() {
+        guard let item = model.undoClose() else { return }
+        setCompact(false)
+        showProgress()
+        presentation.focus(item.id, animated: true)
     }
 
     @objc private func deleteFocusedTask() {

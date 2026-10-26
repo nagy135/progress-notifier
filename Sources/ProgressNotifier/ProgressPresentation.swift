@@ -37,6 +37,9 @@ final class ProgressPresentation: ObservableObject {
 
     deinit { timer?.invalidate() }
 
+    // The empty compact card only needs room for its status icon and close button.
+    var cardWidth: CGFloat { 200 + 150 * expansion - 128 * emptyPresence * (1 - expansion) }
+    var windowWidth: CGFloat { cardWidth + 20 }
     var chromeHeight: CGFloat { 36 + 44 * expansion + 30 * expansion * updatesControlPresence }
     var naturalContentHeight: CGFloat {
         let rowHeight = rows.reduce(CGFloat.zero) { total, row in

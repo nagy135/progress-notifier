@@ -475,7 +475,7 @@ struct ProgressCard: View {
         }
         .padding(.horizontal, Self.horizontalInset(expansion: expansion))
         .padding(.vertical, Self.verticalInset(expansion: expansion))
-        .frame(width: blend(200, 350, expansion))
+        .frame(width: presentation.cardWidth)
         .background {
             RoundedRectangle(cornerRadius: 20).fill(.regularMaterial)
                 .overlay {

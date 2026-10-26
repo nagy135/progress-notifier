@@ -217,7 +217,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         var frame = panel.frame
         let rightEdge = frame.maxX
         frame.origin.y += frame.height - height
-        frame.size = NSSize(width: 220 + 150 * presentation.expansion, height: height)
+        frame.size = NSSize(width: presentation.windowWidth, height: height)
         frame.origin.x = rightEdge - frame.width
         if !panel.isVisible || reposition {
             frame.origin = NSPoint(x: screen.visibleFrame.maxX - frame.width - 6,

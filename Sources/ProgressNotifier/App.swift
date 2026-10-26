@@ -86,13 +86,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 return nil
             case "h": self.recallCompleted(); return nil
             case "c": self.model.clearCompleted(); return nil
-            case "z":
+            case "x":
                 if !event.isARepeat {
                     if event.modifierFlags.contains(.shift) { self.undoClose() }
                     else { self.closeFocusedTask() }
                 }
                 return nil
-            case "x":
+            case "z":
                 if !event.isARepeat {
                     if event.modifierFlags.contains(.shift) { self.undoDeletion() }
                     else { self.deleteFocusedTask() }
@@ -182,16 +182,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let clear = NSMenuItem(title: "Clear Completed Results (C)", action: #selector(clearCompleted), keyEquivalent: "")
         clear.target = self
         menu.addItem(clear)
-        let close = NSMenuItem(title: "Close Focused Task (Z)", action: #selector(closeFocusedTask), keyEquivalent: "")
+        let close = NSMenuItem(title: "Close Focused Task (X)", action: #selector(closeFocusedTask), keyEquivalent: "")
         close.target = self
         menu.addItem(close)
-        let undoClose = NSMenuItem(title: "Undo Task Close (Shift+Z)", action: #selector(undoClose), keyEquivalent: "")
+        let undoClose = NSMenuItem(title: "Undo Task Close (Shift+X)", action: #selector(undoClose), keyEquivalent: "")
         undoClose.target = self
         menu.addItem(undoClose)
-        let delete = NSMenuItem(title: "Delete Focused Task (X)", action: #selector(deleteFocusedTask), keyEquivalent: "")
+        let delete = NSMenuItem(title: "Delete Focused Task (Z)", action: #selector(deleteFocusedTask), keyEquivalent: "")
         delete.target = self
         menu.addItem(delete)
-        let undo = NSMenuItem(title: "Undo Task Deletion (Shift+X)", action: #selector(undoDeletion), keyEquivalent: "")
+        let undo = NSMenuItem(title: "Undo Task Deletion (Shift+Z)", action: #selector(undoDeletion), keyEquivalent: "")
         undo.target = self
         menu.addItem(undo)
         menu.addItem(.separator())

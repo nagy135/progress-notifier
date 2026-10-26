@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var keyboardMonitor: Any?
     private var windowHidden = false
     private var compact = UserDefaults.standard.bool(forKey: "compactMode")
+    private var placement = PanelPlacement(rawValue: UserDefaults.standard.string(forKey: "panelPlacement") ?? "") ?? .topRight
     private let presentation = ProgressPresentation(compact: UserDefaults.standard.bool(forKey: "compactMode"))
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -24,7 +25,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let hide = NSMenuItem(title: "Close Progress Window", action: #selector(hideProgress), keyEquivalent: "w")
         hide.target = self
         appMenu.addItem(hide)
-        addHistoryActions(to: appMenu)
+        addProgressActions(to: appMenu)
         appMenu.addItem(withTitle: "Quit Progress Notifier", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         let mainMenu = NSMenu()
         let appItem = NSMenuItem()
@@ -43,7 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let hideItem = NSMenuItem(title: "Close Progress Window", action: #selector(hideProgress), keyEquivalent: "")
         hideItem.target = self
         menu.addItem(hideItem)
-        addHistoryActions(to: menu)
+        addProgressActions(to: menu)
         menu.addItem(withTitle: "Quit Progress Notifier", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         item.menu = menu
         statusItem = item
@@ -80,6 +81,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             case "k": self.presentation.moveFocus(by: -1, animated: true); return nil
             case "q": self.hideProgress(); return nil
             case "m": self.toggleCompact(); return nil
+            case ".":
+                if !event.isARepeat { self.togglePlacement() }
+                return nil
             case "h": self.recallCompleted(); return nil
             case "c": self.model.clearCompleted(); return nil
             case "d":
@@ -140,8 +144,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         refreshPanel()
     }
 
-    private func addHistoryActions(to menu: NSMenu) {
+    @objc private func togglePlacement() {
+        placement = placement.toggled
+        UserDefaults.standard.set(placement.rawValue, forKey: "panelPlacement")
+        if let hosting = panel?.contentView as? NSHostingView<PanelContent<ProgressCard>> {
+            hosting.rootView.placement = placement
+        }
+        resizePanel(reposition: true)
+    }
+
+    private func addProgressActions(to menu: NSMenu) {
         menu.addItem(.separator())
+        let corner = NSMenuItem(title: "Switch Top / Bottom Corner (.)", action: #selector(togglePlacement), keyEquivalent: "")
+        corner.target = self
+        menu.addItem(corner)
         let updates = NSMenuItem(title: "Toggle Focused Task Details (D)", action: #selector(toggleUpdates), keyEquivalent: "")
         updates.target = self
         menu.addItem(updates)
@@ -201,7 +217,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                                     toggleUpdates: { [weak self] in self?.toggleUpdates() },
                                     toggleCompact: { [weak self] in self?.toggleCompact() },
                                     close: { [weak self] in self?.hideProgress() })
-            let hosting = NSHostingView(rootView: PanelContent { root })
+            let hosting = NSHostingView(rootView: PanelContent(placement: placement) { root })
             hosting.sizingOptions = []
             panel.contentView = hosting
         }
@@ -213,17 +229,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func resizePanel(reposition: Bool = false) {
         guard let panel, !windowHidden,
               let screen = panel.screen ?? NSScreen.main ?? NSScreen.screens.first else { return }
-        let height = presentation.windowHeight
-        var frame = panel.frame
-        let rightEdge = frame.maxX
-        frame.origin.y += frame.height - height
-        frame.size = NSSize(width: presentation.windowWidth, height: height)
-        frame.origin.x = rightEdge - frame.width
-        if !panel.isVisible || reposition {
-            frame.origin = NSPoint(x: screen.visibleFrame.maxX - frame.width - 6,
-                                   y: screen.visibleFrame.maxY - frame.height - 6)
-        }
-        frame.origin.y = max(screen.visibleFrame.minY, frame.origin.y)
+        let frame = placement.frame(resizing: panel.frame,
+                                    to: NSSize(width: presentation.windowWidth, height: presentation.windowHeight),
+                                    in: screen.visibleFrame, reposition: !panel.isVisible || reposition)
         panel.setFrame(frame, display: true)
         panel.contentView?.layoutSubtreeIfNeeded()
     }

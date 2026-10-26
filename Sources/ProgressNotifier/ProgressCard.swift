@@ -211,7 +211,7 @@ private struct ItemCard: View {
     let consumeUpdatePulse: () -> Bool
     let now: Date
     let expansion: CGFloat
-    let dismiss: () -> Void
+    let close: () -> Void
     let detailsHeight: CGFloat
     let historyHeight: CGFloat
     let selected: Bool
@@ -345,12 +345,12 @@ private struct ItemCard: View {
                 .allowsHitTesting(false)
         }
         .overlay(alignment: .topTrailing) {
-            Button(action: dismiss) {
+            Button(action: close) {
                 Image(systemName: "xmark").font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(.secondary).frame(width: 22, height: 22).contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Dismiss \(item.name)")
+            .accessibilityLabel("Close \(item.name)")
             .modifier(ExcludeFromToggle())
             .padding(.trailing, 12 * expansion).padding(.top, 9 * expansion)
             .opacity(detailOpacity).allowsHitTesting(expansion > 0.95)
@@ -396,7 +396,7 @@ struct ProgressCard: View {
     private var palette: ProgressPalette { ProgressPalette(colorScheme: colorScheme) }
 
     private var expansion: CGFloat { presentation.expansion }
-    private var runningCount: Int { model.items.filter { !$0.completing }.count }
+    private var runningCount: Int { model.displayItems.filter { !$0.completing }.count }
 
     static func horizontalInset(expansion: CGFloat) -> CGFloat { blend(12, 14, expansion) }
     static func verticalInset(expansion: CGFloat) -> CGFloat { blend(8, 14, expansion) }
@@ -425,7 +425,7 @@ struct ProgressCard: View {
                                 ItemCard(item: row.item, revision: model.revision(for: row.item),
                                          consumeUpdatePulse: { model.consumeUpdatePulse(for: row.item) },
                                          now: context.date, expansion: expansion,
-                                         dismiss: { model.dismiss(row.item) }, detailsHeight: row.detailsHeight,
+                                         close: { model.close(row.item) }, detailsHeight: row.detailsHeight,
                                          historyHeight: row.historyHeight,
                                          selected: presentation.focusedItemID == row.id, panelFocused: model.isFocused,
                                          updatesUnfolded: presentation.showsUpdates(for: row.id))

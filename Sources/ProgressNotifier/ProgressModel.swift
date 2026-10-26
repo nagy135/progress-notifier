@@ -6,7 +6,7 @@ final class ProgressModel: ObservableObject {
     @Published private(set) var items: [ProgressItem] = []
     @Published private(set) var recalledItems: [ProgressItem] = []
     @Published var isFocused = false
-    var displayItems: [ProgressItem] { items.filter { !$0.completing } + recalledItems }
+    var displayItems: [ProgressItem] { registry.visibleItems.filter { !$0.completing } + recalledItems }
     var hasHistory: Bool { !registry.history.isEmpty }
     private let registry: ProgressRegistry
     private let stateURL: URL
@@ -37,6 +37,7 @@ final class ProgressModel: ObservableObject {
 
     func dismiss(_ name: String) { registry.dismiss(name: name); publish() }
     func dismiss(_ item: ProgressItem) { registry.dismiss(id: item.id); publish() }
+    func close(_ item: ProgressItem) { registry.close(id: item.id); publish() }
 
     @discardableResult
     func undoDeletion() -> ProgressItem? {

@@ -86,6 +86,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 return nil
             case "h": self.recallCompleted(); return nil
             case "c": self.model.clearCompleted(); return nil
+            case "z":
+                if !event.isARepeat { self.closeFocusedTask() }
+                return nil
             case "x":
                 if !event.isARepeat {
                     if event.modifierFlags.contains(.shift) { self.undoDeletion() }
@@ -176,6 +179,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let clear = NSMenuItem(title: "Clear Completed Results (C)", action: #selector(clearCompleted), keyEquivalent: "")
         clear.target = self
         menu.addItem(clear)
+        let close = NSMenuItem(title: "Close Focused Task (Z)", action: #selector(closeFocusedTask), keyEquivalent: "")
+        close.target = self
+        menu.addItem(close)
         let delete = NSMenuItem(title: "Delete Focused Task (X)", action: #selector(deleteFocusedTask), keyEquivalent: "")
         delete.target = self
         menu.addItem(delete)
@@ -208,6 +214,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     @objc private func clearCompleted() { model.clearCompleted() }
+
+    @objc private func closeFocusedTask() {
+        guard let item = presentation.focusedItem else { return }
+        model.close(item)
+    }
 
     @objc private func deleteFocusedTask() {
         guard let item = presentation.focusedItem else { return }

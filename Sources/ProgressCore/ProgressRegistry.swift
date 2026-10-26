@@ -114,6 +114,7 @@ public struct ProgressSnapshot: Codable {
     public let dismissed: [String]
     public let history: [ProgressItem]?
     public var deletions: [ProgressDeletion]? = nil
+    public var closedItemIDs: [UUID]? = nil
 }
 
 public struct ProgressDeletion: Codable {
@@ -130,6 +131,7 @@ public final class ProgressRegistry {
     private var revealedHistoryIDs = Set<UUID>()
     private var visitedHistoryIDs = Set<UUID>()
     private var dismissed = Set<String>()
+    private var closedItemIDs = Set<UUID>()
     public private(set) var deletions: [ProgressDeletion] = []
     public init(snapshot: ProgressSnapshot? = nil) {
         guard let snapshot else { return }
@@ -146,6 +148,7 @@ public final class ProgressRegistry {
             history.append(restored)
         }
         dismissed = Set(snapshot.dismissed.filter { !names.contains($0) })
+        closedItemIDs = Set(snapshot.closedItemIDs ?? []).intersection(items.map(\.id))
         var deletedIDs = Set<UUID>()
         var deletedNames = names
         for deletion in snapshot.deletions ?? [] {
@@ -180,7 +183,12 @@ public final class ProgressRegistry {
     }
 
     public var snapshot: ProgressSnapshot {
-        ProgressSnapshot(items: items.filter { !$0.completing }, dismissed: dismissed.sorted(), history: history, deletions: deletions)
+        ProgressSnapshot(items: items.filter { !$0.completing }, dismissed: dismissed.sorted(), history: history,
+                         deletions: deletions, closedItemIDs: closedItemIDs.sorted { $0.uuidString < $1.uuidString })
+    }
+
+    public var visibleItems: [ProgressItem] {
+        items.filter { !closedItemIDs.contains($0.id) }
     }
 
     public var revealedHistory: [ProgressItem] {
@@ -217,6 +225,7 @@ public final class ProgressRegistry {
         }
         if let index = items.firstIndex(where: { $0.name == value.name }) {
             guard !items[index].completing else { return false }
+            closedItemIDs.remove(items[index].id)
             items[index].progress = value.progress
             items[index].expectedFinish = now.addingTimeInterval(value.etaSeconds)
             items[index].completing = value.progress == 100
@@ -269,6 +278,17 @@ public final class ProgressRegistry {
         items.removeAll { $0.id == id && $0.completing }
     }
 
+    /// Close only the current card. The next accepted update shows the same task again.
+    public func close(id: UUID) {
+        if items.contains(where: { $0.id == id && !$0.completing }) {
+            closedItemIDs.insert(id)
+        } else {
+            items.removeAll { $0.id == id && $0.completing }
+            revealedHistoryIDs.remove(id)
+            visitedHistoryIDs.remove(id)
+        }
+    }
+
     public func dismiss(id: UUID) {
         let item: ProgressItem
         let index: Int
@@ -281,6 +301,7 @@ public final class ProgressRegistry {
             index = historyIndex
         } else { return }
         deletions.append(ProgressDeletion(item: item, index: index))
+        closedItemIDs.remove(id)
         items.removeAll { $0.id == id }
         history.removeAll { $0.id == id }
         revealedHistoryIDs.remove(id)

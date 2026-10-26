@@ -1,16 +1,28 @@
 import AppKit
 import SwiftUI
 
-private final class ProgressPanel: NSPanel {
+final class ProgressPanel: NSPanel {
     var hideProgress: (() -> Void)?
     override var canBecomeKey: Bool { true }
     override func close() { hideProgress?() }
+
+    func releaseKeyboardFocus() {
+        guard isVisible else { return }
+        // resignKey() is an AppKit notification hook, not a focus-transfer API.
+        // Order out to release WindowServer focus, then restore without becoming key.
+        let previousAnimation = animationBehavior
+        animationBehavior = .none
+        orderOut(nil)
+        if NSApp.isActive { NSApp.deactivate() }
+        orderFrontRegardless()
+        animationBehavior = previousAnimation
+    }
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let model = ProgressModel()
     private let server = HTTPServer()
-    private var panel: NSPanel?
+    private var panel: ProgressPanel?
     private var statusItem: NSStatusItem?
     private var statusLine: NSMenuItem?
     private var screenObserver: NSObjectProtocol?
@@ -65,11 +77,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.hideProgress = { [weak self] in self?.hideProgress() }
         self.panel = panel
         keyboardMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self, event.window === self.panel,
+            guard let self, let panel = self.panel, event.window === panel else { return event }
+            // Use the same current key status for shortcuts and the focus outline.
+            self.model.isFocused = panel.isKeyWindow
+            guard panel.isKeyWindow,
                   event.modifierFlags.intersection([.command, .control, .option]).isEmpty else { return event }
             if event.keyCode == 53 { // Escape releases focus without hiding the panel.
-                self.panel?.resignKey()
-                if NSApp.isActive { NSApp.deactivate() }
+                panel.releaseKeyboardFocus()
                 return nil
             }
             switch event.keyCode {

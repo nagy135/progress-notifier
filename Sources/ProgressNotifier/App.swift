@@ -86,6 +86,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 return nil
             case "h": self.recallCompleted(); return nil
             case "c": self.model.clearCompleted(); return nil
+            case "x":
+                if !event.isARepeat {
+                    if event.modifierFlags.contains(.shift) { self.undoDeletion() }
+                    else { self.deleteFocusedTask() }
+                }
+                return nil
             case "d":
                 if !event.isARepeat {
                     if event.modifierFlags.contains(.shift) { self.toggleAllUpdates() }
@@ -170,6 +176,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let clear = NSMenuItem(title: "Clear Completed Results (C)", action: #selector(clearCompleted), keyEquivalent: "")
         clear.target = self
         menu.addItem(clear)
+        let delete = NSMenuItem(title: "Delete Focused Task (X)", action: #selector(deleteFocusedTask), keyEquivalent: "")
+        delete.target = self
+        menu.addItem(delete)
+        let undo = NSMenuItem(title: "Undo Task Deletion (Shift+X)", action: #selector(undoDeletion), keyEquivalent: "")
+        undo.target = self
+        menu.addItem(undo)
         menu.addItem(.separator())
     }
 
@@ -196,6 +208,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     @objc private func clearCompleted() { model.clearCompleted() }
+
+    @objc private func deleteFocusedTask() {
+        // Compact mode has no visible selection: first reveal the target, then X deletes it.
+        if compact { setCompact(false); return }
+        guard let item = presentation.focusedItem else { return }
+        model.dismiss(item)
+    }
+
+    @objc private func undoDeletion() {
+        guard let item = model.undoDeletion() else { return }
+        setCompact(false)
+        showProgress()
+        presentation.focus(item.id, animated: true)
+    }
 
     private func refreshPanel(reposition: Bool = false) {
         guard let panel else { return }

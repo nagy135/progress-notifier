@@ -39,6 +39,13 @@ final class ProgressModel: ObservableObject {
     func dismiss(_ item: ProgressItem) { registry.dismiss(id: item.id); publish() }
 
     @discardableResult
+    func undoDeletion() -> ProgressItem? {
+        guard let item = registry.deletions.last?.item, registry.undoDeletion() else { return nil }
+        publish()
+        return item
+    }
+
+    @discardableResult
     func recallCompleted() -> Bool {
         guard registry.revealNextCompleted() else { return false }
         publish()
@@ -93,16 +100,18 @@ final class ProgressModel: ObservableObject {
             }
             do {
                 let update: ProgressUpdate
-                do { update = try JSONDecoder().decode(ProgressUpdate.self, from: request.body) }
+                do { update = try JSONDecoder().decode(ProgressUpdate.self, from: request.body).validated() }
+                catch let error as APIError { throw error }
                 catch { throw APIError(400, "Expected JSON: name (string), progress (0–100), etaSeconds (seconds remaining); optional description and project must be strings and projectIcon must be a T3 project icon object") }
-                let name = update.name.trimmingCharacters(in: .whitespacesAndNewlines)
-                let wasCompleting = registry.items.first(where: { $0.name == name })?.completing ?? false
+                // Deleted updates acknowledge receipt without saving, publishing, or feedback.
+                guard !registry.isDeleted(update) else { return HTTPResponse(["ok": true]) }
+                let wasCompleting = registry.item(for: update)?.completing ?? false
                 let completed = try registry.update(update)
-                if !wasCompleting, let item = registry.items.first(where: { $0.name == name }) {
+                if !wasCompleting, let item = registry.item(for: update) {
                     revisions[item.id, default: 0] &+= 1
                 }
                 publish()
-                if completed, let item = items.first(where: { $0.name == update.name.trimmingCharacters(in: .whitespacesAndNewlines) }) {
+                if completed, let item = registry.item(for: update) {
                     if let completionFeedback { completionFeedback() }
                     else {
                         sound = NSSound(named: "Glass")

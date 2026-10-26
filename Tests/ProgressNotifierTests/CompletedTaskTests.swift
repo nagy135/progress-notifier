@@ -68,9 +68,10 @@ final class CompletedTaskTests: XCTestCase {
         XCTAssertTrue(model.displayItems.isEmpty)
         waitForCompletionRetirement()
         XCTAssertTrue(model.displayItems.isEmpty)
-        XCTAssertTrue(model.hasHistory)
+        XCTAssertFalse(model.hasHistory)
         model.clearCompleted()
-        XCTAssertTrue(model.recallCompleted())
+        XCTAssertFalse(model.recallCompleted())
+        XCTAssertNotNil(model.undoDeletion())
         model.dismiss("Build")
         XCTAssertTrue(model.displayItems.isEmpty)
     }

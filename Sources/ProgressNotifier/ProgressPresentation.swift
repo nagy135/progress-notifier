@@ -99,6 +99,15 @@ final class ProgressPresentation: ObservableObject {
     var showsUpdates: Bool { focusedItemID.map { expandedItemIDs.contains($0) } ?? false }
     func showsUpdates(for id: UUID) -> Bool { expandedItemIDs.contains(id) }
 
+    func focus(_ id: UUID, animated: Bool) {
+        guard !isCompact, desiredItems.contains(where: { $0.id == id }) else { return }
+        rememberedItemID = id
+        if updatesFollowFocus {
+            expandedItemIDs = [id]
+            animate(animated: animated)
+        }
+    }
+
     func moveFocus(by offset: Int, animated: Bool) {
         guard !isCompact, !desiredItems.isEmpty else { return }
         let current = desiredItems.firstIndex(where: { $0.id == focusedItemID }) ?? 0

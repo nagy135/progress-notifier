@@ -68,7 +68,7 @@ final class ProgressCoreTests: XCTestCase {
         XCTAssertEqual(registry.revealedHistory.map(\.id), [id])
     }
 
-    func testRecalledResultsCannotBlockOrDismissNewRunsWithTheSameName() throws {
+    func testDeletingRecalledResultSuppressesItsNameUntilUndoWithoutRemovingNewRun() throws {
         let registry = ProgressRegistry()
         let older = try finish("Build", in: registry)
         let newer = try finish("Build", in: registry)
@@ -81,13 +81,17 @@ final class ProgressCoreTests: XCTestCase {
         registry.dismiss(id: newer)
         XCTAssertEqual(registry.items.map(\.id), [runningID])
         try registry.update(.init(name: "Build", progress: 20, etaSeconds: 40))
-        XCTAssertEqual(registry.items[0].progress, 20)
+        XCTAssertEqual(registry.items[0].progress, 10)
         XCTAssertTrue(registry.revealNextCompleted())
         XCTAssertEqual(registry.revealedHistory.map(\.id), [older])
         XCTAssertFalse(registry.revealNextCompleted())
         registry.clearCompleted()
         XCTAssertTrue(registry.revealNextCompleted())
-        XCTAssertEqual(registry.revealedHistory.map(\.id), [newer])
+        XCTAssertEqual(registry.revealedHistory.map(\.id), [older])
+        XCTAssertTrue(registry.undoDeletion())
+        XCTAssertEqual(registry.revealedHistory.map(\.id), [newer, older])
+        try registry.update(.init(name: "Build", progress: 20, etaSeconds: 40))
+        XCTAssertEqual(registry.items[0].progress, 20)
     }
 
     func testNewCompletionsAppearAutomaticallyWithoutRepeatingOnRecall() throws {
@@ -223,6 +227,8 @@ final class ProgressCoreTests: XCTestCase {
         XCTAssertEqual(restored.items.count, 1)
         try restored.update(.init(name: "Tests", progress: 100, etaSeconds: 0))
         try restored.update(.init(name: "Tests", progress: 0, etaSeconds: 30))
+        XCTAssertEqual(restored.items.count, 1)
+        XCTAssertTrue(restored.undoDeletion())
         XCTAssertEqual(restored.items.count, 2)
     }
 
@@ -264,7 +270,7 @@ final class ProgressCoreTests: XCTestCase {
         XCTAssertEqual(registry.items.count, 1)
     }
 
-    func testDismissalKeepsUpdatesSilentUntilCompletion() throws {
+    func testDismissalKeepsUpdatesSilentUntilUndo() throws {
         let registry = ProgressRegistry()
         try registry.update(.init(name: " Build ", progress: 10, etaSeconds: 30))
         registry.dismiss(name: "Build")
@@ -274,6 +280,8 @@ final class ProgressCoreTests: XCTestCase {
         XCTAssertTrue(registry.items.isEmpty)
         XCTAssertTrue(registry.history.isEmpty)
         try registry.update(.init(name: "Build", progress: 0, etaSeconds: 30))
+        XCTAssertTrue(registry.items.isEmpty)
+        XCTAssertTrue(registry.undoDeletion())
         XCTAssertEqual(registry.items.count, 1)
     }
 

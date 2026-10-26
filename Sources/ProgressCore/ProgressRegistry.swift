@@ -113,9 +113,15 @@ public struct ProgressSnapshot: Codable {
     public let items: [ProgressItem]
     public let dismissed: [String]
     public let history: [ProgressItem]?
+    public var deletions: [ProgressDeletion]? = nil
 }
 
-/// Accessed on the main queue. Dismissed names stay silent until their client sends 100%.
+public struct ProgressDeletion: Codable {
+    public let item: ProgressItem
+    public let index: Int
+}
+
+/// Accessed on the main queue. Deleted names stay silent until undo.
 public final class ProgressRegistry {
     public static let updateLimit = 200
     public static let historyLimit = 200
@@ -124,6 +130,7 @@ public final class ProgressRegistry {
     private var revealedHistoryIDs = Set<UUID>()
     private var visitedHistoryIDs = Set<UUID>()
     private var dismissed = Set<String>()
+    public private(set) var deletions: [ProgressDeletion] = []
     public init(snapshot: ProgressSnapshot? = nil) {
         guard let snapshot else { return }
         var names = Set<String>()
@@ -139,6 +146,16 @@ public final class ProgressRegistry {
             history.append(restored)
         }
         dismissed = Set(snapshot.dismissed.filter { !names.contains($0) })
+        var deletedIDs = Set<UUID>()
+        var deletedNames = names
+        for deletion in snapshot.deletions ?? [] {
+            guard let item = Self.restored(deletion.item), deletion.index >= 0,
+                  !ids.contains(item.id), deletedIDs.insert(item.id).inserted else { continue }
+            if !item.completing {
+                guard deletedNames.insert(item.name).inserted else { continue }
+            }
+            deletions.append(ProgressDeletion(item: item, index: deletion.index))
+        }
     }
 
     private static func restored(_ item: ProgressItem) -> ProgressItem? {
@@ -163,7 +180,7 @@ public final class ProgressRegistry {
     }
 
     public var snapshot: ProgressSnapshot {
-        ProgressSnapshot(items: items.filter { !$0.completing }, dismissed: dismissed.sorted(), history: history)
+        ProgressSnapshot(items: items.filter { !$0.completing }, dismissed: dismissed.sorted(), history: history, deletions: deletions)
     }
 
     public var revealedHistory: [ProgressItem] {
@@ -193,6 +210,7 @@ public final class ProgressRegistry {
     @discardableResult
     public func update(_ input: ProgressUpdate, now: Date = Date()) throws -> Bool {
         let value = try input.validated()
+        guard !isDeleted(value) else { return false }
         if dismissed.contains(value.name) {
             if value.progress == 100 { dismissed.remove(value.name) }
             return false
@@ -241,14 +259,10 @@ public final class ProgressRegistry {
     public func dismiss(name: String) {
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         if let item = items.first(where: { $0.name == name }) {
-            if !item.completing { dismissed.insert(name) }
-            revealedHistoryIDs.remove(item.id)
+            dismiss(id: item.id)
         } else {
-            // A client's cleanup can hide its retained result after the API's completion phase.
-            // With a new active run, only that active run is dismissed instead.
-            for item in history where item.name == name { revealedHistoryIDs.remove(item.id) }
+            for item in revealedHistory where item.name == name { dismiss(id: item.id) }
         }
-        items.removeAll { $0.name == name }
     }
 
     public func removeCompleted(id: UUID) {
@@ -256,9 +270,49 @@ public final class ProgressRegistry {
     }
 
     public func dismiss(id: UUID) {
+        let item: ProgressItem
+        let index: Int
+        if let activeIndex = items.firstIndex(where: { $0.id == id && !$0.completing }) {
+            item = items[activeIndex]
+            index = activeIndex
+        } else if let historyIndex = history.firstIndex(where: { $0.id == id }),
+                  revealedHistoryIDs.contains(id) {
+            item = history[historyIndex]
+            index = historyIndex
+        } else { return }
+        deletions.append(ProgressDeletion(item: item, index: index))
+        items.removeAll { $0.id == id }
+        history.removeAll { $0.id == id }
         revealedHistoryIDs.remove(id)
-        if let item = items.first(where: { $0.id == id }) {
-            dismiss(name: item.name)
+        visitedHistoryIDs.remove(id)
+    }
+
+    public func isDeleted(_ update: ProgressUpdate) -> Bool {
+        deletions.contains { $0.item.name == update.name }
+    }
+
+    public func item(for update: ProgressUpdate) -> ProgressItem? {
+        items.first { $0.name == update.name }
+    }
+
+    /// A full active list leaves the stack intact so undo can be retried later.
+    @discardableResult
+    public func undoDeletion() -> Bool {
+        guard let deletion = deletions.last else { return false }
+        let item = deletion.item
+        if item.completing {
+            history.insert(item, at: min(deletion.index, history.count, Self.historyLimit - 1))
+            history = Array(history.prefix(Self.historyLimit))
+            let ids = Set(history.map(\.id))
+            revealedHistoryIDs.formIntersection(ids)
+            visitedHistoryIDs.formIntersection(ids)
+            revealedHistoryIDs.insert(item.id)
+            visitedHistoryIDs.insert(item.id)
+        } else {
+            guard items.count < 50 else { return false }
+            items.insert(item, at: min(deletion.index, items.count))
         }
+        deletions.removeLast()
+        return true
     }
 }

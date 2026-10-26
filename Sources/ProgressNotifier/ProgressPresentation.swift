@@ -94,13 +94,13 @@ final class ProgressPresentation: ObservableObject {
         animate(animated: animated)
     }
 
-    var focusedItemID: UUID? { isCompact ? nil : rememberedItemID }
+    var focusedItemID: UUID? { rememberedItemID }
     var focusedItem: ProgressItem? { desiredItems.first { $0.id == focusedItemID } }
     var showsUpdates: Bool { focusedItemID.map { expandedItemIDs.contains($0) } ?? false }
     func showsUpdates(for id: UUID) -> Bool { expandedItemIDs.contains(id) }
 
     func moveFocus(by offset: Int, animated: Bool) {
-        guard !isCompact, !desiredItems.isEmpty else { return }
+        guard !desiredItems.isEmpty else { return }
         let current = desiredItems.firstIndex(where: { $0.id == focusedItemID }) ?? 0
         let next = min(max(0, current + offset), desiredItems.count - 1)
         guard desiredItems[next].id != focusedItemID else { return }

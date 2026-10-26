@@ -51,6 +51,10 @@ final class DeletionAPITests: XCTestCase {
     }
 
     func testUndoRestoresSelectedTaskAndItsPosition() throws {
+        for compact in [false, true] { try checkUndoRestoresSelection(compact: compact) }
+    }
+
+    private func checkUndoRestoresSelection(compact: Bool) throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
         let registry = ProgressRegistry()
@@ -61,15 +65,15 @@ final class DeletionAPITests: XCTestCase {
         let stateURL = directory.appendingPathComponent("focus.json")
         try JSONEncoder().encode(registry.snapshot).write(to: stateURL)
         let restored = ProgressModel(stateURL: stateURL)
-        let presentation = ProgressPresentation(compact: false)
-        presentation.update(items: restored.displayItems, compact: false, animated: false)
+        let presentation = ProgressPresentation(compact: compact)
+        presentation.update(items: restored.displayItems, compact: compact, animated: false)
         presentation.moveFocus(by: 1, animated: false)
         let selected = try XCTUnwrap(presentation.focusedItem)
         restored.dismiss(selected)
-        presentation.update(items: restored.displayItems, compact: false, animated: false)
+        presentation.update(items: restored.displayItems, compact: compact, animated: false)
         XCTAssertEqual(presentation.focusedItem?.name, "Third")
         let undone = try XCTUnwrap(restored.undoDeletion())
-        presentation.update(items: restored.displayItems, compact: false, animated: false)
+        presentation.update(items: restored.displayItems, compact: compact, animated: false)
         presentation.focus(undone.id, animated: false)
         XCTAssertEqual(presentation.focusedItemID, selected.id)
         XCTAssertEqual(restored.displayItems.map(\.name), ["First", "Second", "Third"])

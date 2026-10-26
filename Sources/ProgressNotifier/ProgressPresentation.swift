@@ -100,7 +100,7 @@ final class ProgressPresentation: ObservableObject {
     func showsUpdates(for id: UUID) -> Bool { expandedItemIDs.contains(id) }
 
     func focus(_ id: UUID, animated: Bool) {
-        guard !isCompact, desiredItems.contains(where: { $0.id == id }) else { return }
+        guard desiredItems.contains(where: { $0.id == id }) else { return }
         rememberedItemID = id
         if updatesFollowFocus {
             expandedItemIDs = [id]

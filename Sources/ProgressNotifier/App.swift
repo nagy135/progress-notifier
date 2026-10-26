@@ -210,8 +210,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     @objc private func clearCompleted() { model.clearCompleted() }
 
     @objc private func deleteFocusedTask() {
-        // Compact mode has no visible selection: first reveal the target, then X deletes it.
-        if compact { setCompact(false); return }
         guard let item = presentation.focusedItem else { return }
         model.dismiss(item)
     }

@@ -1,22 +1,10 @@
 import AppKit
 import SwiftUI
 
-final class ProgressPanel: NSPanel {
+private final class ProgressPanel: NSPanel {
     var hideProgress: (() -> Void)?
     override var canBecomeKey: Bool { true }
     override func close() { hideProgress?() }
-
-    func releaseKeyboardFocus() {
-        guard isVisible else { return }
-        // resignKey() is an AppKit notification hook, not a focus-transfer API.
-        // Order out to release WindowServer focus, then restore without becoming key.
-        let previousAnimation = animationBehavior
-        animationBehavior = .none
-        orderOut(nil)
-        if NSApp.isActive { NSApp.deactivate() }
-        orderFrontRegardless()
-        animationBehavior = previousAnimation
-    }
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
@@ -82,10 +70,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             self.model.isFocused = panel.isKeyWindow
             guard panel.isKeyWindow,
                   event.modifierFlags.intersection([.command, .control, .option]).isEmpty else { return event }
-            if event.keyCode == 53 { // Escape releases focus without hiding the panel.
-                panel.releaseKeyboardFocus()
-                return nil
-            }
             switch event.keyCode {
             case 125: self.presentation.moveFocus(by: 1, animated: true); return nil
             case 126: self.presentation.moveFocus(by: -1, animated: true); return nil

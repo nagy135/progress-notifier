@@ -147,7 +147,7 @@ The listener binds **only to IPv4 loopback `127.0.0.1:8766`**, using Apple's [Ne
 
 `POST /items` also accepts optional `"t3Thread":{"environmentId":"...","threadId":"..."}`;
 `GET /items` returns the same object when attached. Both IDs are required together
-and accept 1–512 ASCII letters, digits, hyphens, or underscores. Malformed destinations
+and accept 1–512 ASCII letters, digits, hyphens, underscores, or colons. Malformed destinations
 return 400 before changing the task. Omitted or null destinations preserve the current
 link. Links persist through relaunch, completion, recall, close, and undo; a new run
 with the same name starts without the previous run's link.

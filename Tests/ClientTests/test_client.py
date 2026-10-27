@@ -55,10 +55,10 @@ class ClientTests(unittest.TestCase):
 
     def testT3DestinationIsPassedAsOneReference(self):
         code, _, err, request = self.invoke(["Build", "40", "90", "--t3-environment-id", "mac-123",
-                                            "--t3-thread-id", "thread_456"], result={"ok": True})
+                                            "--t3-thread-id", "mcp:thread_456"], result={"ok": True})
         self.assertEqual((code, err), (0, ""))
         request.assert_called_once_with("/items", "POST", {"name": "Build", "progress": 40, "etaSeconds": 90,
-                                                          "t3Thread": {"environmentId": "mac-123", "threadId": "thread_456"}})
+                                                          "t3Thread": {"environmentId": "mac-123", "threadId": "mcp:thread_456"}})
 
     def testIncompleteInvalidAndCommandModeT3DestinationsAreRejected(self):
         for args in [["Build", "40", "90", "--t3-thread-id", "thread"],

@@ -61,9 +61,9 @@ def main():
         path, method = "/items", "POST"
         value = {"name": args.name, "progress": args.progress, "etaSeconds": args.eta_seconds}
         if args.t3_environment_id is not None or args.t3_thread_id is not None:
-            if not all(identifier is not None and re.fullmatch(r"[A-Za-z0-9_-]{1,512}", identifier)
+            if not all(identifier is not None and re.fullmatch(r"[A-Za-z0-9_:-]{1,512}", identifier)
                        for identifier in (args.t3_environment_id, args.t3_thread_id)):
-                parser.error("Supply both T3 IDs, each containing 1–512 ASCII letters, digits, hyphens, or underscores")
+                parser.error("Supply both T3 IDs, each containing 1–512 ASCII letters, digits, hyphens, underscores, or colons")
             value["t3Thread"] = {"environmentId": args.t3_environment_id, "threadId": args.t3_thread_id}
         if args.description is not None:
             description = args.description.replace("\r\n", "\n").replace("\r", "\n").strip()

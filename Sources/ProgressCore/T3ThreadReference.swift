@@ -15,20 +15,23 @@ public struct T3ThreadReference: Codable, Equatable {
             guard !value.isEmpty, value.count <= 512,
                   value.unicodeScalars.allSatisfy({
                       (65...90).contains($0.value) || (97...122).contains($0.value)
-                          || (48...57).contains($0.value) || $0 == "-" || $0 == "_"
+                          || (48...57).contains($0.value) || $0 == "-" || $0 == "_" || $0 == ":"
                   }) else {
-                throw APIError(400, "t3Thread.\(field) must contain 1–512 ASCII letters, digits, hyphens, or underscores")
+                throw APIError(400, "t3Thread.\(field) must contain 1–512 ASCII letters, digits, hyphens, underscores, or colons")
             }
         }
         return self
     }
 
     public var url: URL? {
-        guard (try? validated()) != nil else { return nil }
+        let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_")
+        guard (try? validated()) != nil,
+              let environment = environmentId.addingPercentEncoding(withAllowedCharacters: allowed),
+              let thread = threadId.addingPercentEncoding(withAllowedCharacters: allowed) else { return nil }
         var components = URLComponents()
         components.scheme = "t3code"
         components.host = "threads"
-        components.path = "/\(environmentId)/\(threadId)"
+        components.percentEncodedPath = "/\(environment)/\(thread)"
         return components.url
     }
 }

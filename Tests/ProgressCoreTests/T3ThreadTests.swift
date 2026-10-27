@@ -42,6 +42,10 @@ final class T3ThreadTests: XCTestCase {
         try registry.update(.init(name: "Build", progress: 20, etaSeconds: 30, t3Thread: replacement))
         XCTAssertEqual(registry.items.first?.t3Thread, replacement)
         XCTAssertEqual(reference.url?.absoluteString, "t3code://threads/mac-123/thread_456")
+        let namespaced = T3ThreadReference(environmentId: "mac", threadId: "mcp:thread-123")
+        try registry.update(.init(name: "Build", progress: 25, etaSeconds: 20, t3Thread: namespaced))
+        XCTAssertEqual(try reload(registry).items.first?.t3Thread, namespaced)
+        XCTAssertEqual(namespaced.url?.absoluteString, "t3code://threads/mac/mcp%3Athread-123")
     }
 
     func testLegacySnapshotsAndInvalidSavedDestinationsKeepTasksUsable() throws {

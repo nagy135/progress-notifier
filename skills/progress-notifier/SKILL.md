@@ -62,7 +62,7 @@ compact and expanded modes and for recalled completed results. Unlinked cards do
 nothing on Enter. The destination is stored as optional
 `"t3Thread":{"environmentId":"...","threadId":"..."}` in the API and saved state;
 `GET /items` returns it when present. Both IDs must contain 1–512 ASCII letters,
-digits, hyphens, or underscores. Existing cards remain unlinked until an update
+digits, hyphens, underscores, or colons. Existing cards remain unlinked until an update
 supplies the IDs; a new run never inherits a previous run's destination.
 
 ```sh

@@ -53,6 +53,26 @@ class ClientTests(unittest.TestCase):
                                                           "project": "nix-darwin", "projectIcon": {
                                                               "kind": "lucide", "name": "snowflake", "color": "blue"}})
 
+    def testT3DestinationIsPassedAsOneReference(self):
+        code, _, err, request = self.invoke(["Build", "40", "90", "--t3-environment-id", "mac-123",
+                                            "--t3-thread-id", "thread_456"], result={"ok": True})
+        self.assertEqual((code, err), (0, ""))
+        request.assert_called_once_with("/items", "POST", {"name": "Build", "progress": 40, "etaSeconds": 90,
+                                                          "t3Thread": {"environmentId": "mac-123", "threadId": "thread_456"}})
+
+    def testIncompleteInvalidAndCommandModeT3DestinationsAreRejected(self):
+        for args in [["Build", "40", "90", "--t3-thread-id", "thread"],
+                     ["Build", "40", "90", "--t3-environment-id", "mac"],
+                     ["--list", "--t3-environment-id", "mac", "--t3-thread-id", "thread"]]:
+            with self.assertRaises(SystemExit) as error:
+                self.invoke(args)
+            self.assertEqual(error.exception.code, 2)
+        for invalid in ["", "../other", "id?prompt=bad", "bad\n", "é", "a" * 513]:
+            for environment, thread in [(invalid, "thread"), ("mac", invalid)]:
+                with self.assertRaises(SystemExit) as error:
+                    self.invoke(["Build", "40", "90", "--t3-environment-id", environment, "--t3-thread-id", thread])
+                self.assertEqual(error.exception.code, 2)
+
     def testInvalidIconJSONIsRejectedBeforeSending(self):
         for icon in ["not json", "[]", '"🎹"', '{"kind":"unknown"}']:
             with self.assertRaises(SystemExit) as error:

@@ -73,7 +73,7 @@ final class ProgressModel: ObservableObject {
         // Standard clients encode query spaces as +; an actual plus arrives as %2B.
         url.percentEncodedQuery = url.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%20")
         if url.path == "/health", request.method == "GET" {
-            return HTTPResponse(["app": "progress-notifier", "version": "1.4.4", "status": "ok"])
+            return HTTPResponse(["app": "progress-notifier", "version": "1.5.0", "status": "ok"])
         }
         guard url.path == "/items" else { return HTTPResponse(404, ["error": "Unknown endpoint"]) }
         switch request.method {
@@ -90,6 +90,9 @@ final class ProgressModel: ObservableObject {
                 value["updateCount"] = $0.updates.count
                 if let latest = $0.updates.first { value["description"] = latest.description }
                 if let project = $0.project { value["project"] = project }
+                if let thread = $0.t3Thread {
+                    value["t3Thread"] = ["environmentId": thread.environmentId, "threadId": thread.threadId]
+                }
                 if let icon = $0.projectIcon,
                    let data = try? JSONEncoder().encode(icon),
                    let object = try? JSONSerialization.jsonObject(with: data) { value["projectIcon"] = object }
@@ -110,7 +113,7 @@ final class ProgressModel: ObservableObject {
                 let update: ProgressUpdate
                 do { update = try JSONDecoder().decode(ProgressUpdate.self, from: request.body).validated() }
                 catch let error as APIError { throw error }
-                catch { throw APIError(400, "Expected JSON: name (string), progress (0–100), etaSeconds (seconds remaining); optional description and project must be strings and projectIcon must be a T3 project icon object") }
+                catch { throw APIError(400, "Expected JSON: name (string), progress (0–100), etaSeconds (seconds remaining); optional description and project must be strings, projectIcon must be a T3 project icon object, and t3Thread must contain environmentId and threadId strings") }
                 // Deleted updates acknowledge receipt without saving, publishing, or feedback.
                 guard !registry.isDeleted(update) else { return HTTPResponse(["ok": true]) }
                 let wasCompleting = registry.item(for: update)?.completing ?? false

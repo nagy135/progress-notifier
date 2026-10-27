@@ -43,13 +43,15 @@ def dismiss(name):
 try:
     assert call("/health")["app"] == "progress-notifier"
     icon = {"kind": "lucide", "name": "snowflake", "color": "blue"}
-    update(names[0], 0, 120, project="progress-notifier", description="Prepared build inputs")
+    thread = {"environmentId": "smoke-environment", "threadId": "smoke-thread"}
+    update(names[0], 0, 120, project="progress-notifier", description="Prepared build inputs", t3Thread=thread)
     update(names[1], 10, 90, project="nix-darwin", projectIcon=icon)
     assert len(items()) == 2
     with ThreadPoolExecutor(max_workers=2) as pool:
         list(pool.map(lambda name: update(name, 42, 60), names))
     assert all(item["progress"] == 42 and 55 <= item["etaSeconds"] <= 60 for item in items())
     assert items()[0]["project"] == "progress-notifier"
+    assert items()[0]["t3Thread"] == thread
     assert items()[1]["projectIcon"] == icon
     update(names[0], 42, 60, description="Compiled the app")
     first = next(item for item in items() if item["name"] == names[0])
@@ -69,7 +71,9 @@ try:
     call("/items", "POST", b'{}', {"Content-Type": "application/json"}, status=400)
     for metadata in [{"description": 42}, {"description": "x" * 2001}, {"description": "bad\x00text"}, {"project": 42}, {"projectIcon": "snowflake"},
                      {"projectIcon": {"kind": "lucide", "name": "../file", "color": "blue"}},
-                     {"projectIcon": {"kind": "emoji", "emoji": ""}}]:
+                     {"projectIcon": {"kind": "emoji", "emoji": ""}},
+                     {"t3Thread": {"environmentId": "smoke-environment"}},
+                     {"t3Thread": {"environmentId": "smoke-environment", "threadId": "../bad?prompt=bad"}}]:
         body = {"name": names[0], "progress": 42, "etaSeconds": 30, **metadata}
         call("/items", "POST", json.dumps(body).encode(), {"Content-Type": "application/json"}, status=400)
     call("/items", "POST", b'not json', {"Content-Type": "application/json"}, status=400)
@@ -97,6 +101,7 @@ try:
     assert next(item for item in items() if item["name"] == names[0])["progress"] == 73
     update(names[0], 73, 20, project="")
     assert "project" not in items()[0] and "projectIcon" not in items()[0]
+    assert items()[0]["t3Thread"] == thread
 
     dismiss(names[1])
     update(names[1], 60)
@@ -111,7 +116,7 @@ try:
     assert not items()
     update(names[0], 100, 0)
     assert not items()
-    print("PASS: live API, descriptions, snapshot order/retries, legacy clients, metadata, validation, fragmented HTTP, dismissal, and completion")
+    print("PASS: live API, descriptions, snapshot order/retries, legacy clients, metadata, T3 thread links, validation, fragmented HTTP, dismissal, and completion")
 finally:
     for name in names:
         try:

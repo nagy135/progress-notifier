@@ -83,6 +83,26 @@ move it just as in expanded mode. Expanding keeps the selected task. Navigation 
 new tasks keep the same selection; removing the focused task selects its next neighbor,
 or the previous one when it was last.
 
+Press **Enter** (or keypad Enter) to focus T3 Code and open the selected task's
+originating thread, in either mode and for recalled results. The app targets
+`/Applications/T3 Code (Beta).app` explicitly so an installed Nightly cannot claim
+the link. Cards without a destination do nothing on Enter. The menu bar also has
+**Open Focused Task in T3 Code (Enter)**.
+
+Attach the destination on the first update; later updates and completion preserve it:
+
+```sh
+./scripts/progress-notify 'Build release' 0 180 --project 'progress-notifier' \
+  --description 'Preparing the release build' \
+  --t3-environment-id '<environmentId>' --t3-thread-id '<threadId>'
+```
+
+Agents get `environmentId` from T3's `t3_environment_read` and `currentThreadId` from
+`t3_thread_list`. Provider conversation IDs such as `CODEX_THREAD_ID` are different.
+The shared skill supplies this metadata automatically for T3 runs. Existing cards
+can be linked by sending both flags on their next update. No T3 Code changes or
+Accessibility permission are needed for this shortcut.
+
 Each ledger row has a time column, description, recorded percentage, and proportional
 bar, with the newest update first. **Shift+D** opens all tasks with earlier descriptions;
 when all are open, it folds them all. In this mode, D toggles only the selected task
@@ -124,6 +144,13 @@ The listener binds **only to IPv4 loopback `127.0.0.1:8766`**, using Apple's [Ne
 | `DELETE /items?name=Build%20release` | Dismiss an item without a success sound. Idempotent. |
 
 `GET /items` returns current tasks, including their brief 1.25-second completion phase. Completed results remain visible as history after leaving the active API; retained and recalled history does not appear in the API or block a new task using the same name. `DELETE /items?name=...` deletes an active run and suppresses that name until Shift+Z restores it. With no active run, it deletes that name’s visible completed records individually. Repeated deletes of an absent item do not add stack entries.
+
+`POST /items` also accepts optional `"t3Thread":{"environmentId":"...","threadId":"..."}`;
+`GET /items` returns the same object when attached. Both IDs are required together
+and accept 1–512 ASCII letters, digits, hyphens, or underscores. Malformed destinations
+return 400 before changing the task. Omitted or null destinations preserve the current
+link. Links persist through relaunch, completion, recall, close, and undo; a new run
+with the same name starts without the previous run's link.
 
 Invalid input returns JSON `{"error":"…"}` with an HTTP 4xx status. Supports HTTP/1.0 and HTTP/1.1, one request per connection, Content-Length bodies up to 16 KiB, headers up to 8 KiB, 50 tracked items, and 64 simultaneous connections with a five-second read timeout. Chunked request bodies are unsupported. Always include Content-Length for POST; curl and the Python client supply it automatically.
 

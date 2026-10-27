@@ -72,6 +72,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             guard panel.isKeyWindow,
                   event.modifierFlags.intersection([.command, .control, .option]).isEmpty else { return event }
             switch event.keyCode {
+            case 36, 76:
+                if !event.isARepeat { self.openFocusedThread() }
+                return nil
             case 125: self.presentation.moveFocus(by: 1, animated: true); return nil
             case 126: self.presentation.moveFocus(by: -1, animated: true); return nil
             default: break
@@ -167,6 +170,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private func addProgressActions(to menu: NSMenu) {
         menu.addItem(.separator())
+        let thread = NSMenuItem(title: "Open Focused Task in T3 Code (Enter)", action: #selector(openFocusedThread), keyEquivalent: "")
+        thread.target = self
+        menu.addItem(thread)
         let corner = NSMenuItem(title: "Switch Top / Bottom Corner (.)", action: #selector(togglePlacement), keyEquivalent: "")
         corner.target = self
         menu.addItem(corner)
@@ -220,6 +226,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     @objc private func clearCompleted() { model.clearCompleted() }
+
+    @objc private func openFocusedThread() {
+        T3ThreadOpener().open(presentation.focusedItem?.t3Thread)
+    }
 
     @objc private func closeFocusedTask() {
         guard let item = presentation.focusedItem else { return }

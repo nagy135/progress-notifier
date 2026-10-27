@@ -105,7 +105,12 @@ Attach the destination on the first update; later updates and completion preserv
 ```
 
 Agents get `environmentId` from T3's `t3_environment_read` and `currentThreadId` from
-`t3_thread_list`. Provider conversation IDs such as `CODEX_THREAD_ID` are different.
+`t3_thread_list`. Delegates follow `subagent` parent relationships to the user-facing
+chat and send that thread ID instead; forks keep their own destination. Parents pass
+the resolved destination and project metadata in delegate briefs so children can link
+their cards even without T3 tools. Separate task names preserve each delegate's
+progress; a shared destination connects the cards' symbols and Enter shortcut.
+Provider conversation IDs such as `CODEX_THREAD_ID` are different.
 The shared skill supplies this metadata automatically for T3 runs. Existing cards
 can be linked by sending both flags on their next update. No T3 Code changes or
 Accessibility permission are needed for this shortcut.

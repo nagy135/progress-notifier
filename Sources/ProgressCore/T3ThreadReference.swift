@@ -1,7 +1,7 @@
 import Foundation
 
 /// A destination in T3 Code, independent of the task's display name and project.
-public struct T3ThreadReference: Codable, Equatable {
+public struct T3ThreadReference: Codable, Hashable {
     public let environmentId: String
     public let threadId: String
 

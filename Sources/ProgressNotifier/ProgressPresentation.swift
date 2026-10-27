@@ -2,6 +2,12 @@ import AppKit
 import SwiftUI
 import ProgressCore
 
+enum ThreadGroupSymbol: String, CaseIterable {
+    case circle, triangle, square, diamond
+
+    var accessibilityLabel: String { "Shared T3 thread: \(rawValue)" }
+}
+
 /// A single animation clock owns row geometry, empty state, mode changes and the window frame.
 final class ProgressPresentation: ObservableObject {
     struct Row: Identifiable {
@@ -9,6 +15,7 @@ final class ProgressPresentation: ObservableObject {
         var presence: CGFloat
         var detailsHeight: CGFloat = 64
         var historyHeight: CGFloat = 0
+        var threadGroupSymbol: ThreadGroupSymbol?
         var id: UUID { item.id }
     }
 
@@ -23,6 +30,7 @@ final class ProgressPresentation: ObservableObject {
     @Published var maximumHeight: CGFloat = 800
     var geometryChanged: (() -> Void)?
     private var desiredItems: [ProgressItem] = []
+    private var threadGroupSymbols: [T3ThreadReference: ThreadGroupSymbol] = [:]
     private var targetExpansion: CGFloat
     private var measuredHeights: [UUID: CGFloat] = [:]
     private var measuredHistoryHeights: [UUID: CGFloat] = [:]
@@ -62,6 +70,7 @@ final class ProgressPresentation: ObservableObject {
         isCompact = compact
         let previousIndex = desiredItems.firstIndex(where: { $0.id == rememberedItemID }) ?? 0
         desiredItems = items
+        updateThreadGroupSymbols(items)
         if !items.contains(where: { $0.id == rememberedItemID }) {
             rememberedItemID = items.isEmpty ? nil : items[min(previousIndex, items.count - 1)].id
         }
@@ -76,14 +85,30 @@ final class ProgressPresentation: ObservableObject {
         var nextRows = items.map { item -> Row in
             var row = existing[item.id] ?? Row(item: item, presence: 0)
             row.item = item
+            row.threadGroupSymbol = item.t3Thread.flatMap { threadGroupSymbols[$0] }
             return row
         }
         // Keep departing cards alive until their space and opacity have reached zero.
-        for (index, row) in rows.enumerated() where !desiredIDs.contains(row.id) {
+        for (index, var row) in rows.enumerated() where !desiredIDs.contains(row.id) {
+            row.threadGroupSymbol = nil
             nextRows.insert(row, at: min(index, nextRows.count))
         }
         rows = nextRows
         animate(animated: animated)
+    }
+
+    private func updateThreadGroupSymbols(_ items: [ProgressItem]) {
+        let counts = Dictionary(grouping: items.compactMap(\.t3Thread), by: { $0 }).mapValues(\.count)
+        // Retain assignments across progress updates, reordering and mode changes.
+        // A slot becomes available when fewer than two visible tasks share its thread.
+        threadGroupSymbols = threadGroupSymbols.filter { (counts[$0.key] ?? 0) > 1 }
+        for item in items {
+            guard let thread = item.t3Thread, (counts[thread] ?? 0) > 1,
+                  threadGroupSymbols[thread] == nil,
+                  let symbol = ThreadGroupSymbol.allCases.first(where: { !threadGroupSymbols.values.contains($0) })
+            else { continue }
+            threadGroupSymbols[thread] = symbol
+        }
     }
 
     func measure(_ heights: [UUID: CGFloat], animated: Bool) {

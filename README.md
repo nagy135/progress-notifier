@@ -83,6 +83,13 @@ move it just as in expanded mode. Expanding keeps the selected task. Navigation 
 new tasks keep the same selection; removing the focused task selects its next neighbor,
 or the previous one when it was last.
 
+When two or more visible tasks share the same T3 environment and thread ID, they
+show a matching outline symbol beside their project icon: circle, triangle, square,
+or diamond. In compact mode the symbol sits between the icon and progress bar.
+Up to four shared thread groups receive symbols; additional groups remain unmarked
+until a slot becomes free. Symbols stay assigned while a group remains visible,
+including across reordering and mode changes. Visible completed results count too.
+
 Press **Enter** (or keypad Enter) to focus T3 Code and open the selected task's
 originating thread, in either mode and for recalled results. The app targets
 `/Applications/T3 Code (Beta).app` explicitly so an installed Nightly cannot claim

@@ -217,6 +217,7 @@ private struct ItemCard: View {
     let selected: Bool
     let panelFocused: Bool
     let updatesUnfolded: Bool
+    let threadGroupSymbol: ThreadGroupSymbol?
 
     @Environment(\.colorScheme) private var colorScheme
     private var palette: ProgressPalette { ProgressPalette(colorScheme: colorScheme) }
@@ -231,20 +232,21 @@ private struct ItemCard: View {
     private var earlierUpdateCount: Int { max(0, item.updates.count - 1) }
     private var noteMatchesProgress: Bool { latest?.progress == item.progress }
     private var completionHeaderHeight: CGFloat { item.completing ? 32 : 0 }
+    private var iconWidth: CGFloat { threadGroupSymbol == nil ? 22 : 38 }
 
     private var details: some View {
         VStack(alignment: .leading, spacing: 2) {
             if let project = item.project {
                 Text(project).font(.system(size: 10, weight: .medium))
                     .foregroundStyle(.secondary).lineLimit(1)
-                    .frame(height: 16).padding(.leading, 22)
+                    .frame(height: 16).padding(.leading, iconWidth).padding(.trailing, 26)
             }
             Text(item.name).font(.system(size: 13, weight: .semibold))
                 .lineLimit(2).padding(.trailing, 30)
-                .padding(.leading, item.project == nil ? 22 : 0)
+                .padding(.leading, item.project == nil ? iconWidth : 0)
             Text(timing).lineLimit(1).minimumScaleFactor(0.8)
                 .font(.system(size: latest == nil ? 11 : 10)).foregroundStyle(.secondary).monospacedDigit()
-                .padding(.leading, item.project == nil && latest == nil ? 22 : 0)
+                .padding(.leading, item.project == nil && latest == nil ? iconWidth : 0)
             if let latest {
                 SnapshotRow(entry: latest, now: now, latest: true, showMeter: !noteMatchesProgress)
                     .padding(.top, 8)
@@ -296,7 +298,7 @@ private struct ItemCard: View {
                 .padding(.bottom, 8 * expansion)
             HStack(spacing: 0) {
                 Color.clear
-                    .frame(width: blend(22, latest == nil ? 0 : 38, expansion), height: 16)
+                    .frame(width: blend(iconWidth, latest == nil ? 0 : 38, expansion), height: 16)
                     .overlay(alignment: .leading) {
                         if earlierUpdateCount > 0 {
                             HStack(spacing: 3) {
@@ -339,7 +341,16 @@ private struct ItemCard: View {
         .padding(.horizontal, 12 * expansion)
         .padding(.vertical, 9 * expansion)
         .overlay(alignment: .topLeading) {
-            ProjectIconView(project: item.project ?? item.name, icon: item.projectIcon)
+            HStack(spacing: 4) {
+                ProjectIconView(project: item.project ?? item.name, icon: item.projectIcon)
+                if let threadGroupSymbol {
+                    Image(systemName: threadGroupSymbol.rawValue)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 12, height: 16)
+                        .accessibilityLabel(threadGroupSymbol.accessibilityLabel)
+                }
+            }
                 .padding(.leading, 12 * expansion)
                 .padding(.top, blend((ProgressCard.compactRowHeight - 16) / 2, 9 + completionHeaderHeight, expansion))
                 .allowsHitTesting(false)
@@ -428,7 +439,8 @@ struct ProgressCard: View {
                                          close: { model.close(row.item) }, detailsHeight: row.detailsHeight,
                                          historyHeight: row.historyHeight,
                                          selected: presentation.focusedItemID == row.id, panelFocused: model.isFocused,
-                                         updatesUnfolded: presentation.showsUpdates(for: row.id))
+                                         updatesUnfolded: presentation.showsUpdates(for: row.id),
+                                         threadGroupSymbol: row.threadGroupSymbol)
                                     .frame(width: blend(144, Self.expandedRowWidth, expansion), alignment: .leading)
                                     .fixedSize(horizontal: false, vertical: true)
                                     .frame(height: presentation.rowHeight(row) * row.presence,

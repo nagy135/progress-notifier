@@ -87,6 +87,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             case ".":
                 if !event.isARepeat { self.togglePlacement() }
                 return nil
+            case ",":
+                if !event.isARepeat { self.cycleScreen() }
+                return nil
             case "h": self.recallCompleted(); return nil
             case "c": self.model.clearCompleted(); return nil
             case "x":
@@ -168,6 +171,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         resizePanel(reposition: true)
     }
 
+    @objc private func cycleScreen() {
+        guard let panel, !windowHidden else { return }
+        let screens = NSScreen.screens
+        guard screens.count > 1 else { return }
+        let current = screens.firstIndex { $0 == panel.screen }
+        let next = screens[((current ?? -1) + 1) % screens.count]
+        presentation.maximumHeight = max(160, next.visibleFrame.height - 48)
+        // Move and resize together so a tall stack fits the destination immediately.
+        // Later animation ticks use panel.screen and stay on the new display.
+        resizePanel(reposition: true, screen: next)
+    }
+
     private func addProgressActions(to menu: NSMenu) {
         menu.addItem(.separator())
         let thread = NSMenuItem(title: "Open Focused Task in T3 Code (Enter)", action: #selector(openFocusedThread), keyEquivalent: "")
@@ -176,6 +191,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let corner = NSMenuItem(title: "Switch Top / Bottom Corner (.)", action: #selector(togglePlacement), keyEquivalent: "")
         corner.target = self
         menu.addItem(corner)
+        let screen = NSMenuItem(title: "Move to Next Monitor (,)", action: #selector(cycleScreen), keyEquivalent: "")
+        screen.target = self
+        menu.addItem(screen)
         let updates = NSMenuItem(title: "Toggle Focused Task Details (D)", action: #selector(toggleUpdates), keyEquivalent: "")
         updates.target = self
         menu.addItem(updates)
@@ -284,9 +302,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.orderFrontRegardless()
     }
 
-    private func resizePanel(reposition: Bool = false) {
+    private func resizePanel(reposition: Bool = false, screen destination: NSScreen? = nil) {
         guard let panel, !windowHidden,
-              let screen = panel.screen ?? NSScreen.main ?? NSScreen.screens.first else { return }
+              let screen = destination ?? panel.screen ?? NSScreen.main ?? NSScreen.screens.first else { return }
         let frame = placement.frame(resizing: panel.frame,
                                     to: NSSize(width: presentation.windowWidth, height: presentation.windowHeight),
                                     in: screen.visibleFrame, reposition: !panel.isVisible || reposition)

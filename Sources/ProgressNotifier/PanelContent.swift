@@ -1,5 +1,10 @@
 import SwiftUI
 
+/// A click on an inactive panel should reach its controls and gestures immediately.
+final class ProgressHostingView<Content: View>: NSHostingView<Content> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+}
+
 /// AppKit rounds window dimensions. Keep spare space away from the anchored corner
 /// instead of recentering the card by a different fraction of a point on every resize.
 struct PanelContent<Content: View>: View {

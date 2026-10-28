@@ -78,8 +78,8 @@ chat and gives related cards the same thread-group symbol without merging progre
 With the panel focused, **Enter** (or keypad Enter) opens the selected task's
 linked chat (the parent chat for delegates) and focuses
 `/Applications/T3 Code (Beta).app`. This works in compact and expanded modes and
-for recalled completed results. Unlinked cards do
-nothing on Enter. The destination is stored as optional
+for recalled completed results. Click a task to select it. Double-click a task to select it and open its linked chat,
+even when the panel was inactive. Unlinked cards are selectable but do not open T3 Code. The destination is stored as optional
 `"t3Thread":{"environmentId":"...","threadId":"..."}` in the API and saved state;
 `GET /items` returns it when present. Both IDs must contain 1–512 ASCII letters,
 digits, hyphens, underscores, or colons. Existing cards remain unlinked until an update
@@ -130,7 +130,7 @@ Delete the selected item with **Z** or `--dismiss`. Its existing task name stays
 
 With the panel focused, `.` switches between the top-right and bottom-right corners; `,` cycles through connected monitors while keeping that corner and fitting the stack to the destination screen. Both shortcuts ignore key repeat.
 
-Q, ⌘W, or the window's X hides the window while the app keeps receiving updates. Updates do not reopen a hidden window. Opening the app again restores the current items. Click anywhere except an X, or press M, to toggle between the full list and a compact list with an icon and title-free bar for each item, without a header. Compact rows use the project icon, or a task-name monogram when there is no project metadata. With no items, the expanded window says “No progress”. Items and dismissals are saved across quitting/relaunching. The app automatically shows completed results as history and saves the latest 200 across relaunches. With the panel focused, H recalls one result at a time, newest first, and expands the panel; C hides all completed results and resets H to the newest result without deleting history or affecting active tasks. Recalled cards stay until cleared or individually dismissed and do not replay completion effects. History can also be recalled and cleared from the menu bar menu; it stays hidden after relaunch. `GET /items` lists current tasks only, excluding recalled history. Use the menu bar's Quit or ⌘Q to stop the app entirely; later skill calls silently skip until the user opens it again.
+Q, ⌘W, or the window's X hides the window while the app keeps receiving updates. Updates do not reopen a hidden window. Opening the app again restores the current items. Click the panel background, or press M, to toggle between the full list and a compact list with an icon and title-free bar for each item, without a header. Compact rows use the project icon, or a task-name monogram when there is no project metadata. With no items, the expanded window says “No progress”. Items and dismissals are saved across quitting/relaunching. The app automatically shows completed results as history and saves the latest 200 across relaunches. With the panel focused, H recalls one result at a time, newest first, and expands the panel; C hides all completed results and resets H to the newest result without deleting history or affecting active tasks. Recalled cards stay until cleared or individually dismissed and do not replay completion effects. History can also be recalled and cleared from the menu bar menu; it stays hidden after relaunch. `GET /items` lists current tasks only, excluding recalled history. Use the menu bar's Quit or ⌘Q to stop the app entirely; later skill calls silently skip until the user opens it again.
 
 The API is `http://127.0.0.1:8766`, local to the Mac running the app. For direct clients:
 

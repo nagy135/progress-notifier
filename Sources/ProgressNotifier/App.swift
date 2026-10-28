@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-private final class ProgressPanel: NSPanel {
+final class ProgressPanel: NSPanel {
     var hideProgress: (() -> Void)?
     override var canBecomeKey: Bool { true }
     override func close() { hideProgress?() }
@@ -302,8 +302,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                                     },
                                     toggleUpdates: { [weak self] in self?.toggleUpdates() },
                                     toggleCompact: { [weak self] in self?.toggleCompact() },
+                                    openFocusedThread: { [weak self] in self?.openFocusedThread() },
                                     close: { [weak self] in self?.hideProgress() })
-            let hosting = NSHostingView(rootView: PanelContent(placement: placement) { root })
+            let hosting = ProgressHostingView(rootView: PanelContent(placement: placement) { root })
             hosting.sizingOptions = []
             panel.contentView = hosting
         }

@@ -7,10 +7,17 @@ private struct ButtonFramesKey: PreferenceKey {
     static func reduce(value: inout [CGRect], nextValue: () -> [CGRect]) { value += nextValue() }
 }
 
-private struct ExcludeFromToggle: ViewModifier {
+private struct ItemFramesKey: PreferenceKey {
+    static var defaultValue: [CGRect] = []
+    static func reduce(value: inout [CGRect], nextValue: () -> [CGRect]) { value += nextValue() }
+}
+
+private struct ExcludeFromCardClicks: ViewModifier {
+    var enabled = true
+
     func body(content: Content) -> some View {
         content.background(GeometryReader { proxy in
-            Color.clear.preference(key: ButtonFramesKey.self, value: [proxy.frame(in: .named("progressCard"))])
+            Color.clear.preference(key: ButtonFramesKey.self, value: enabled ? [proxy.frame(in: .named("progressCard"))] : [])
         })
     }
 }
@@ -362,7 +369,7 @@ private struct ItemCard: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Close \(item.name)")
-            .modifier(ExcludeFromToggle())
+            .modifier(ExcludeFromCardClicks(enabled: expansion > 0.95))
             .padding(.trailing, 12 * expansion).padding(.top, 9 * expansion)
             .opacity(detailOpacity).allowsHitTesting(expansion > 0.95)
             .accessibilityHidden(expansion < 0.5)
@@ -400,8 +407,10 @@ struct ProgressCard: View {
     let historyHeightsChanged: ([UUID: CGFloat]) -> Void
     let toggleUpdates: () -> Void
     let toggleCompact: () -> Void
+    let openFocusedThread: () -> Void
     let close: () -> Void
     @State private var buttonFrames: [CGRect] = []
+    @State private var itemFrames: [CGRect] = []
     @State private var focusScrollGeneration = 0
     @Environment(\.colorScheme) private var colorScheme
     private var palette: ProgressPalette { ProgressPalette(colorScheme: colorScheme) }
@@ -446,8 +455,19 @@ struct ProgressCard: View {
                                     .frame(height: presentation.rowHeight(row) * row.presence,
                                            alignment: .top)
                                     .opacity(Double(row.presence)).clipped()
-                                    .allowsHitTesting(row.presence > 0.95)
                                     .accessibilityHidden(row.presence < 0.5)
+                                    .contentShape(Rectangle())
+                                    .simultaneousGesture(SpatialTapGesture(count: 2, coordinateSpace: .named("progressCard")).onEnded { value in
+                                        selectItem(row.id, at: value.location, openThread: true)
+                                    })
+                                    .simultaneousGesture(SpatialTapGesture(coordinateSpace: .named("progressCard")).onEnded { value in
+                                        selectItem(row.id, at: value.location, openThread: false)
+                                    })
+                                    .background(GeometryReader { proxy in
+                                        Color.clear.preference(key: ItemFramesKey.self,
+                                            value: row.presence > 0.95 ? [proxy.frame(in: .named("progressCard"))] : [])
+                                    })
+                                    .allowsHitTesting(row.presence > 0.95)
                                     .padding(.top, presentation.spacing(before: index))
                                     .id(row.id)
                             }
@@ -481,7 +501,7 @@ struct ProgressCard: View {
                             .background(.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 3))
                     }
                 }
-                .buttonStyle(.plain).modifier(ExcludeFromToggle())
+                .buttonStyle(.plain).modifier(ExcludeFromCardClicks(enabled: expansion > 0.95 && presentation.updatesControlPresence > 0.95))
                 .disabled(presentation.focusedItem?.updates.isEmpty != false)
                 .accessibilityLabel(presentation.showsUpdates ? "Hide earlier updates for focused task" : "Show updates for focused task")
                 Spacer()
@@ -520,7 +540,7 @@ struct ProgressCard: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Close progress window")
-            .modifier(ExcludeFromToggle())
+            .modifier(ExcludeFromCardClicks())
             .padding(.horizontal, Self.horizontalInset(expansion: expansion))
             // Keep the X centered on the first compact row despite its larger hit area.
             .padding(.top, Self.verticalInset(expansion: expansion)
@@ -529,6 +549,7 @@ struct ProgressCard: View {
         .padding(10)
         .coordinateSpace(name: "progressCard")
         .onPreferenceChange(ButtonFramesKey.self) { buttonFrames = $0 }
+        .onPreferenceChange(ItemFramesKey.self) { itemFrames = $0 }
         .onPreferenceChange(ItemDetailsHeightsKey.self) { heights in
             DispatchQueue.main.async { detailsHeightsChanged(heights) }
         }
@@ -537,8 +558,15 @@ struct ProgressCard: View {
         }
         .contentShape(Rectangle())
         .simultaneousGesture(SpatialTapGesture().onEnded { value in
-            if !buttonFrames.contains(where: { $0.contains(value.location) }) { toggleCompact() }
+            if !(buttonFrames + itemFrames).contains(where: { $0.contains(value.location) }) { toggleCompact() }
         })
+    }
+
+    private func selectItem(_ id: UUID, at point: CGPoint, openThread: Bool) {
+        guard !buttonFrames.contains(where: { $0.contains(point) }) else { return }
+        presentation.focus(id, animated: true)
+        guard presentation.focusedItemID == id else { return }
+        if openThread { openFocusedThread() }
     }
 
     private func revealFocus(using proxy: ScrollViewProxy) {

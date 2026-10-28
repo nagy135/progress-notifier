@@ -5,6 +5,16 @@ private final class ProgressPanel: NSPanel {
     var hideProgress: (() -> Void)?
     override var canBecomeKey: Bool { true }
     override func close() { hideProgress?() }
+
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .leftMouseDown {
+            // Explicit interaction should establish app activation as well as key
+            // status; passive progress updates keep the panel nonactivating.
+            NSApp.activate(ignoringOtherApps: true)
+            makeKeyAndOrderFront(nil)
+        }
+        super.sendEvent(event)
+    }
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {

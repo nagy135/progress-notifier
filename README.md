@@ -172,6 +172,13 @@ Invalid input returns JSON `{"error":"…"}` with an HTTP 4xx status. Supports H
 ./scripts/progress-notify --health --require-running
 ```
 
+Child/delegate tasks pass `--child` on their initial client update (API:
+`"isChild":true`). They show a **Child** badge in expanded mode and a bent-arrow
+symbol beside the project icon in both modes. The marker survives omitted fields,
+completion, relaunch, and history recall; new runs default to regular tasks.
+`--no-child` clears a mistaken marker. Chat navigation still targets the parent
+chat, independently of this marker.
+
 ## Agent skill
 
 The self-contained skill is in [`skills/progress-notifier`](skills/progress-notifier). Copy that directory into your agent's skills directory. Viktor's shared installation lives in `~/.dots/agents/.agents/skills/progress-notifier` (also exposed at `~/.agents/skills/progress-notifier`). It includes a client and instructions for task naming, ETA updates, successful completion, and cancellation.

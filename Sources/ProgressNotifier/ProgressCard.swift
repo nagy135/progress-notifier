@@ -239,7 +239,7 @@ private struct ItemCard: View {
     private var earlierUpdateCount: Int { max(0, item.updates.count - 1) }
     private var noteMatchesProgress: Bool { latest?.progress == item.progress }
     private var completionHeaderHeight: CGFloat { item.completing ? 32 : 0 }
-    private var iconWidth: CGFloat { threadGroupSymbol == nil ? 22 : 38 }
+    private var iconWidth: CGFloat { 22 + (threadGroupSymbol == nil ? 0 : 16) + (item.isChild ? 16 : 0) }
 
     private var details: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -251,7 +251,15 @@ private struct ItemCard: View {
             Text(item.name).font(.system(size: 13, weight: .semibold))
                 .lineLimit(2).padding(.trailing, 30)
                 .padding(.leading, item.project == nil ? iconWidth : 0)
-            Text(timing).lineLimit(1).minimumScaleFactor(0.8)
+            HStack(spacing: 5) {
+                if item.isChild {
+                    Text("Child").font(.system(size: 9, weight: .semibold))
+                        .padding(.horizontal, 5).padding(.vertical, 1)
+                        .background(.primary.opacity(0.07), in: Capsule())
+                        .accessibilityLabel("Child delegate task")
+                }
+                Text(timing).lineLimit(1).minimumScaleFactor(0.8)
+            }
                 .font(.system(size: latest == nil ? 11 : 10)).foregroundStyle(.secondary).monospacedDigit()
                 .padding(.leading, item.project == nil && latest == nil ? iconWidth : 0)
             if let latest {
@@ -350,6 +358,13 @@ private struct ItemCard: View {
         .overlay(alignment: .topLeading) {
             HStack(spacing: 4) {
                 ProjectIconView(project: item.project ?? item.name, icon: item.projectIcon)
+                if item.isChild {
+                    Image(systemName: "arrow.turn.down.right")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 12, height: 16)
+                        .accessibilityLabel("Child delegate task")
+                }
                 if let threadGroupSymbol {
                     Image(systemName: threadGroupSymbol.rawValue)
                         .font(.system(size: 10, weight: .semibold))

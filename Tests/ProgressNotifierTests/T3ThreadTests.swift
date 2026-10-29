@@ -38,26 +38,33 @@ final class T3ThreadTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: directory) }
         let stateURL = directory.appendingPathComponent("state.json")
         let model = ProgressModel(stateURL: stateURL)
-        func request(_ model: ProgressModel, _ method: String, reference: Any? = nil, progress: Int = 10) throws -> HTTPResponse {
+        func request(_ model: ProgressModel, _ method: String, reference: Any? = nil, progress: Int = 10, isChild: Any? = nil) throws -> HTTPResponse {
             var value: [String: Any] = ["name": "Build", "progress": progress, "etaSeconds": 60]
             value["t3Thread"] = reference
+            value["isChild"] = isChild
             let body = try JSONSerialization.data(withJSONObject: value)
             var wire = Data("\(method) /items HTTP/1.1\r\nContent-Type: application/json\r\nContent-Length: \(body.count)\r\n\r\n".utf8)
             wire.append(body)
             return model.handle(try XCTUnwrap(HTTPRequest.parse(wire)))
         }
         let reference = ["environmentId": "mac", "threadId": "thread"]
-        XCTAssertEqual(try request(model, "POST", reference: reference).status, 200)
+        XCTAssertEqual(try request(model, "POST", reference: reference, isChild: true).status, 200)
         for bad: Any in ["thread", 42, [:], ["threadId": "thread"], ["environmentId": "mac", "threadId": 42],
                          ["environmentId": "mac", "threadId": "thread?prompt=bad"]] {
             XCTAssertEqual(try request(model, "POST", reference: bad, progress: 99).status, 400)
         }
         XCTAssertEqual(try request(model, "POST", reference: NSNull(), progress: 20).status, 200)
         XCTAssertEqual(try request(model, "POST", progress: 30).status, 200)
+        for bad: Any in ["true", 1, [:]] {
+            XCTAssertEqual(try request(model, "POST", progress: 99, isChild: bad).status, 400)
+        }
         let restored = ProgressModel(stateURL: stateURL)
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: request(restored, "GET").body) as? [String: Any])
         let item = try XCTUnwrap((json["items"] as? [[String: Any]])?.first)
         XCTAssertEqual(item["t3Thread"] as? [String: String], reference)
         XCTAssertEqual(item["progress"] as? Int, 30)
+        XCTAssertEqual(item["isChild"] as? Bool, true)
+        XCTAssertEqual(try request(restored, "POST", isChild: false).status, 200)
+        XCTAssertFalse(try XCTUnwrap(restored.items.first).isChild)
     }
 }

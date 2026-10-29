@@ -92,3 +92,13 @@ class ClientTests(unittest.TestCase):
             with self.assertRaises(SystemExit) as error:
                 self.invoke(args)
             self.assertEqual(error.exception.code, 2)
+
+    def testChildMetadataIsExplicitAndOptional(self):
+        for flag, expected in [("--child", True), ("--no-child", False)]:
+            code, _, err, request = self.invoke(["Review", "10", "60", flag], result={"ok": True})
+            self.assertEqual((code, err), (0, ""))
+            self.assertEqual(request.call_args.args[2]["isChild"], expected)
+            with self.assertRaises(SystemExit):
+                self.invoke(["--list", flag])
+        with self.assertRaises(SystemExit):
+            self.invoke(["Review", "10", "60", "--child", "--no-child"])

@@ -63,6 +63,30 @@ tools nor an explicit parent destination are available, send an ordinary unlinke
 notification. Omitted destinations are preserved by subsequent updates, including
 completion, so the flags are needed only on the first update (or when correcting it).
 
+### Identify child/delegate tasks
+
+Every spawned delegate or subagent must pass **`--child` on its initial update**,
+including native subagents, T3 delegates, and nested delegates. This marks the card
+with a “Child” badge in expanded mode and a bent-arrow symbol in compact mode.
+Use it even when no T3 destination is available. Determine child status from your
+actual role or the parent's explicit brief; sharing a chat destination alone does
+not imply a child. Ordinary user-facing runs and forks omit the flag.
+
+The API field is optional `"isChild":true`. Omission preserves the marker on
+later updates and completion; saved state and recalled history retain it. A new
+run defaults to a regular task. Use `--no-child` (`"isChild":false`) only to
+correct a mistaken marker. Keep the stable task name unchanged.
+
+When delegating, explicitly tell each child to use `--child` on its own initial
+card and to pass that instruction to any nested delegates, alongside the shared
+progress destination and project metadata. For example:
+
+```sh
+~/.agents/skills/progress-notifier/scripts/progress-notify 'Review release' 0 120 \
+  --child --project 'progress-notifier' --description 'Reviewing the release changes' \
+  --t3-environment-id '<environmentId>' --t3-thread-id '<resolvedChatThreadId>'
+```
+
 When delegating work, include the resolved progress destination and project metadata
 in each delegate's task brief, instructing it to use these for its initial progress
 card. Pass the same destination through nested delegation. Each delegate keeps its

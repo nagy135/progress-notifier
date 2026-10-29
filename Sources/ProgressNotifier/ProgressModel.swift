@@ -88,6 +88,7 @@ final class ProgressModel: ObservableObject {
                      "progress": entry.progress, "recordedAt": timestamp.string(from: entry.recordedAt)]
                 }
                 value["updateCount"] = $0.updates.count
+                value["isChild"] = $0.isChild
                 if let latest = $0.updates.first { value["description"] = latest.description }
                 if let project = $0.project { value["project"] = project }
                 if let thread = $0.t3Thread {
@@ -113,7 +114,7 @@ final class ProgressModel: ObservableObject {
                 let update: ProgressUpdate
                 do { update = try JSONDecoder().decode(ProgressUpdate.self, from: request.body).validated() }
                 catch let error as APIError { throw error }
-                catch { throw APIError(400, "Expected JSON: name (string), progress (0–100), etaSeconds (seconds remaining); optional description and project must be strings, projectIcon must be a T3 project icon object, and t3Thread must contain environmentId and threadId strings") }
+                catch { throw APIError(400, "Expected JSON: name (string), progress (0–100), etaSeconds (seconds remaining); optional description and project must be strings, projectIcon must be a T3 project icon object, isChild must be a boolean, and t3Thread must contain environmentId and threadId strings") }
                 // Deleted updates acknowledge receipt without saving, publishing, or feedback.
                 guard !registry.isDeleted(update) else { return HTTPResponse(["ok": true]) }
                 let wasCompleting = registry.item(for: update)?.completing ?? false

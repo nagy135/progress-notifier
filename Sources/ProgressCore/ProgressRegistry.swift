@@ -8,8 +8,9 @@ public struct ProgressUpdate: Codable {
     public let projectIcon: ProjectIcon?
     public let description: String?
     public let t3Thread: T3ThreadReference?
+    public let isChild: Bool?
 
-    public init(name: String, progress: Double, etaSeconds: Double, project: String? = nil, projectIcon: ProjectIcon? = nil, description: String? = nil, t3Thread: T3ThreadReference? = nil) {
+    public init(name: String, progress: Double, etaSeconds: Double, project: String? = nil, projectIcon: ProjectIcon? = nil, description: String? = nil, t3Thread: T3ThreadReference? = nil, isChild: Bool? = nil) {
         self.name = name
         self.progress = progress
         self.etaSeconds = etaSeconds
@@ -17,6 +18,7 @@ public struct ProgressUpdate: Codable {
         self.projectIcon = projectIcon
         self.description = description
         self.t3Thread = t3Thread
+        self.isChild = isChild
     }
 
     public func validated() throws -> ProgressUpdate {
@@ -35,7 +37,7 @@ public struct ProgressUpdate: Codable {
                               project: try Self.metadata(project, field: "project", limit: 160),
                               projectIcon: try projectIcon?.validated(),
                               description: try Self.normalizedDescription(description),
-                              t3Thread: try t3Thread?.validated())
+                              t3Thread: try t3Thread?.validated(), isChild: isChild)
     }
 
     public static let descriptionLimit = 2_000
@@ -83,10 +85,11 @@ public struct ProgressItem: Codable, Identifiable {
     public var project: String?
     public var projectIcon: ProjectIcon?
     public var t3Thread: T3ThreadReference? = nil
+    public var isChild: Bool = false
     public var updates: [ProgressEntry] = []
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, createdAt, completedAt, progress, expectedFinish, completing, project, projectIcon, t3Thread, updates
+        case id, name, createdAt, completedAt, progress, expectedFinish, completing, project, projectIcon, t3Thread, isChild, updates
     }
 
 }
@@ -104,6 +107,7 @@ extension ProgressItem {
         project = try values.decodeIfPresent(String.self, forKey: .project)
         projectIcon = try values.decodeIfPresent(ProjectIcon.self, forKey: .projectIcon)
         t3Thread = try values.decodeIfPresent(T3ThreadReference.self, forKey: .t3Thread)
+        isChild = try values.decodeIfPresent(Bool.self, forKey: .isChild) ?? false
         updates = try values.decodeIfPresent([ProgressEntry].self, forKey: .updates) ?? []
     }
 }
@@ -264,6 +268,7 @@ public final class ProgressRegistry {
             if let projectIcon = value.projectIcon { items[index].projectIcon = projectIcon }
             if value.project?.isEmpty == true { items[index].projectIcon = nil }
             if let t3Thread = value.t3Thread { items[index].t3Thread = t3Thread }
+            if let isChild = value.isChild { items[index].isChild = isChild }
             Self.record(value.description, progress: value.progress, on: &items[index], now: now)
             if items[index].completing {
                 items[index].completedAt = now
@@ -284,7 +289,7 @@ public final class ProgressRegistry {
         items.append(ProgressItem(id: UUID(), name: value.name, createdAt: now, completedAt: nil, progress: value.progress,
                                   expectedFinish: now.addingTimeInterval(value.etaSeconds), completing: false,
                                   project: value.project.flatMap { $0.isEmpty ? nil : $0 },
-                                  projectIcon: value.projectIcon, t3Thread: value.t3Thread))
+                                  projectIcon: value.projectIcon, t3Thread: value.t3Thread, isChild: value.isChild ?? false))
         Self.record(value.description, progress: value.progress, on: &items[items.count - 1], now: now)
         return false
     }

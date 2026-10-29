@@ -348,12 +348,14 @@ private struct ItemCard: View {
                     }
                 ItemProgressBar(item: item)
                 // Reserve the same trailing space on every compact row so selecting
-                // a task never shifts its bar. The dot matches the bar's thickness.
+                // a task never shifts its bar. Inset the dot from the selection
+                // outline as well as from the progress bar.
                 Circle().fill(tint)
                     .frame(width: 5, height: 5)
                     .opacity(selected ? (panelFocused ? 1 : 0.6) * Double(1 - expansion) : 0)
                     .frame(width: 5 * (1 - expansion)).clipped()
                     .padding(.leading, 6 * (1 - expansion))
+                    .padding(.trailing, 6 * (1 - expansion))
                     .allowsHitTesting(false).accessibilityHidden(true)
                 Text("\(item.progress, specifier: "%.0f")%")
                     .font(.system(size: 13, weight: .semibold, design: .rounded))

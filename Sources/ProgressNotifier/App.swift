@@ -308,7 +308,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             hosting.sizingOptions = []
             panel.contentView = hosting
         }
-        presentation.update(items: model.displayItems, compact: compact, animated: panel.isVisible)
+        presentation.update(items: model.displayItems, compact: compact, animated: panel.isVisible, timeline: model.timelineEntries)
         resizePanel(reposition: reposition)
         panel.orderFrontRegardless()
     }

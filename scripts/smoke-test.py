@@ -44,8 +44,10 @@ try:
     assert call("/health")["app"] == "progress-notifier"
     icon = {"kind": "lucide", "name": "snowflake", "color": "blue"}
     thread = {"environmentId": "smoke-environment", "threadId": "smoke-thread"}
-    update(names[0], 0, 120, project="progress-notifier", description="Prepared build inputs", t3Thread=thread)
-    update(names[1], 10, 90, project="nix-darwin", projectIcon=icon)
+    parent_run, child_run = str(uuid.uuid4()), str(uuid.uuid4())
+    update(names[0], 0, 120, project="progress-notifier", description="Prepared build inputs", t3Thread=thread, runId=parent_run)
+    update(names[1], 10, 90, project="nix-darwin", projectIcon=icon, t3Thread=thread,
+           isChild=True, runId=child_run, parentRunId=parent_run)
     assert len(items()) == 2
     with ThreadPoolExecutor(max_workers=2) as pool:
         list(pool.map(lambda name: update(name, 42, 60), names))
@@ -53,6 +55,11 @@ try:
     assert items()[0]["project"] == "progress-notifier"
     assert items()[0]["t3Thread"] == thread
     assert items()[1]["projectIcon"] == icon
+    assert items()[0]["runId"].lower() == parent_run
+    assert items()[1]["runId"].lower() == child_run
+    assert items()[1]["parentRunId"].lower() == parent_run
+    assert items()[1]["isChild"] is True
+    assert "id" in items()[0] and "createdAt" in items()[0]
     update(names[0], 42, 60, description="Compiled the app")
     first = next(item for item in items() if item["name"] == names[0])
     assert first["updateCount"] == 2
@@ -69,7 +76,7 @@ try:
     call("/items", "POST", b'{"name":"bad","progress":101,"etaSeconds":0}',
          {"Content-Type": "application/json"}, status=400)
     call("/items", "POST", b'{}', {"Content-Type": "application/json"}, status=400)
-    for metadata in [{"description": 42}, {"description": "x" * 2001}, {"description": "bad\x00text"}, {"project": 42}, {"projectIcon": "snowflake"},
+    for metadata in [{"runId": "invalid"}, {"parentRunId": 42}, {"description": 42}, {"description": "x" * 2001}, {"description": "bad\x00text"}, {"project": 42}, {"projectIcon": "snowflake"},
                      {"projectIcon": {"kind": "lucide", "name": "../file", "color": "blue"}},
                      {"projectIcon": {"kind": "emoji", "emoji": ""}},
                      {"t3Thread": {"environmentId": "smoke-environment"}},
@@ -116,7 +123,7 @@ try:
     assert not items()
     update(names[0], 100, 0)
     assert not items()
-    print("PASS: live API, descriptions, snapshot order/retries, legacy clients, metadata, T3 thread links, validation, fragmented HTTP, dismissal, and completion")
+    print("PASS: live API, descriptions, snapshot order/retries, legacy clients, metadata, T3 thread and parent-run links, validation, fragmented HTTP, dismissal, and completion")
 finally:
     for name in names:
         try:

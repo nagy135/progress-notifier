@@ -102,3 +102,19 @@ class ClientTests(unittest.TestCase):
                 self.invoke(["--list", flag])
         with self.assertRaises(SystemExit):
             self.invoke(["Review", "10", "60", "--child", "--no-child"])
+
+    def testRunAndParentIDsAreValidatedAndPassedThrough(self):
+        run = "22222222-2222-4222-8222-222222222222"
+        parent = "11111111-1111-4111-8111-111111111111"
+        code, _, err, request = self.invoke(["Child", "0", "60", "--child", "--run-id", run,
+                                            "--parent-run-id", parent], result={"ok": True})
+        self.assertEqual((code, err), (0, ""))
+        self.assertEqual(request.call_args.args[2]["runId"], run)
+        self.assertEqual(request.call_args.args[2]["parentRunId"], parent)
+        for args in [["--list", "--run-id", run],
+                     ["Child", "0", "60", "--run-id", "not-a-uuid"],
+                     ["Child", "0", "60", "--parent-run-id", parent],
+                     ["Child", "0", "60", "--run-id", run, "--parent-run-id", parent],
+                     ["Child", "0", "60", "--child", "--run-id", run, "--parent-run-id", run]]:
+            with self.assertRaises(SystemExit):
+                self.invoke(args)

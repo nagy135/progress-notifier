@@ -8,9 +8,11 @@ public struct ProgressUpdate: Codable {
     public let projectIcon: ProjectIcon?
     public let description: String?
     public let t3Thread: T3ThreadReference?
+    public let runId: UUID?
+    public let parentRunId: UUID?
     public let isChild: Bool?
 
-    public init(name: String, progress: Double, etaSeconds: Double, project: String? = nil, projectIcon: ProjectIcon? = nil, description: String? = nil, t3Thread: T3ThreadReference? = nil, isChild: Bool? = nil) {
+    public init(name: String, progress: Double, etaSeconds: Double, project: String? = nil, projectIcon: ProjectIcon? = nil, description: String? = nil, t3Thread: T3ThreadReference? = nil, isChild: Bool? = nil, runId: UUID? = nil, parentRunId: UUID? = nil) {
         self.name = name
         self.progress = progress
         self.etaSeconds = etaSeconds
@@ -19,6 +21,8 @@ public struct ProgressUpdate: Codable {
         self.description = description
         self.t3Thread = t3Thread
         self.isChild = isChild
+        self.runId = runId
+        self.parentRunId = parentRunId
     }
 
     public func validated() throws -> ProgressUpdate {
@@ -33,11 +37,14 @@ public struct ProgressUpdate: Codable {
         guard etaSeconds.isFinite, (0...31_536_000).contains(etaSeconds) else {
             throw APIError(400, "etaSeconds must be seconds remaining, from 0 to 31536000")
         }
+        guard parentRunId == nil || (runId != nil && isChild != false && parentRunId != runId) else {
+            throw APIError(400, "parentRunId requires a distinct runId and a child task")
+        }
         return ProgressUpdate(name: name, progress: progress, etaSeconds: etaSeconds,
                               project: try Self.metadata(project, field: "project", limit: 160),
                               projectIcon: try projectIcon?.validated(),
                               description: try Self.normalizedDescription(description),
-                              t3Thread: try t3Thread?.validated(), isChild: isChild)
+                              t3Thread: try t3Thread?.validated(), isChild: isChild, runId: runId, parentRunId: parentRunId)
     }
 
     public static let descriptionLimit = 2_000
@@ -85,11 +92,14 @@ public struct ProgressItem: Codable, Identifiable {
     public var project: String?
     public var projectIcon: ProjectIcon?
     public var t3Thread: T3ThreadReference? = nil
+    public var runId: UUID? = nil
+    public var parentRunId: UUID? = nil
+    public var creationOrder: UInt64? = nil
     public var isChild: Bool = false
     public var updates: [ProgressEntry] = []
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, createdAt, completedAt, progress, expectedFinish, completing, project, projectIcon, t3Thread, isChild, updates
+        case id, name, createdAt, completedAt, progress, expectedFinish, completing, project, projectIcon, t3Thread, isChild, runId, parentRunId, creationOrder, updates
     }
 
 }
@@ -108,6 +118,9 @@ extension ProgressItem {
         projectIcon = try values.decodeIfPresent(ProjectIcon.self, forKey: .projectIcon)
         t3Thread = try values.decodeIfPresent(T3ThreadReference.self, forKey: .t3Thread)
         isChild = try values.decodeIfPresent(Bool.self, forKey: .isChild) ?? false
+        runId = try values.decodeIfPresent(UUID.self, forKey: .runId)
+        parentRunId = try values.decodeIfPresent(UUID.self, forKey: .parentRunId)
+        creationOrder = try values.decodeIfPresent(UInt64.self, forKey: .creationOrder)
         updates = try values.decodeIfPresent([ProgressEntry].self, forKey: .updates) ?? []
     }
 }
@@ -149,6 +162,7 @@ public final class ProgressRegistry {
     private var closedItemIDs = Set<UUID>()
     public private(set) var deletions: [ProgressDeletion] = []
     public private(set) var closures: [ProgressClosure] = []
+    private var nextCreationOrder: UInt64 = 0
     public init(snapshot: ProgressSnapshot? = nil) {
         guard let snapshot else { return }
         var names = Set<String>()
@@ -185,6 +199,8 @@ public final class ProgressRegistry {
             closures.append(ProgressClosure(item: item, index: closure.index))
             if !item.completing { closedItemIDs.insert(item.id) }
         }
+        let retained = items + history + deletions.map(\.item) + closures.map(\.item)
+        nextCreationOrder = (retained.compactMap(\.creationOrder).max() ?? 0) &+ 1
         // Older snapshots saved hidden active IDs without their close order.
         for (index, item) in items.enumerated() where closedItemIDs.contains(item.id) && !closureIDs.contains(item.id) {
             closures.append(ProgressClosure(item: item, index: index))
@@ -258,6 +274,7 @@ public final class ProgressRegistry {
             return false
         }
         if let index = items.firstIndex(where: { $0.name == value.name }) {
+            try validateRelationship(value, existing: items[index])
             guard !items[index].completing else { return false }
             closedItemIDs.remove(items[index].id)
             closures.removeAll { $0.item.id == items[index].id }
@@ -269,6 +286,8 @@ public final class ProgressRegistry {
             if value.project?.isEmpty == true { items[index].projectIcon = nil }
             if let t3Thread = value.t3Thread { items[index].t3Thread = t3Thread }
             if let isChild = value.isChild { items[index].isChild = isChild }
+            if let runId = value.runId { items[index].runId = runId }
+            if let parentRunId = value.parentRunId { items[index].parentRunId = parentRunId }
             Self.record(value.description, progress: value.progress, on: &items[index], now: now)
             if items[index].completing {
                 items[index].completedAt = now
@@ -285,13 +304,56 @@ public final class ProgressRegistry {
         }
         // Unknown completions are no-ops, so retries cannot create phantom notifications.
         guard value.progress < 100 else { return false }
+        // A completed run cannot be resurrected by a delayed/retried milestone.
+        if let runId = value.runId, history.contains(where: { $0.runId == runId && $0.name == value.name }) { return false }
+        try validateRelationship(value, existing: nil)
         guard items.count < 50 else { throw APIError(409, "At most 50 active items are supported") }
         items.append(ProgressItem(id: UUID(), name: value.name, createdAt: now, completedAt: nil, progress: value.progress,
                                   expectedFinish: now.addingTimeInterval(value.etaSeconds), completing: false,
                                   project: value.project.flatMap { $0.isEmpty ? nil : $0 },
-                                  projectIcon: value.projectIcon, t3Thread: value.t3Thread, isChild: value.isChild ?? false))
+                                  projectIcon: value.projectIcon, t3Thread: value.t3Thread,
+                                  runId: value.runId, parentRunId: value.parentRunId, creationOrder: nextCreationOrder,
+                                  isChild: value.isChild ?? false))
+        nextCreationOrder &+= 1
         Self.record(value.description, progress: value.progress, on: &items[items.count - 1], now: now)
         return false
+    }
+
+    private func validateRelationship(_ value: ProgressUpdate, existing: ProgressItem?) throws {
+        let run = value.runId ?? existing?.runId
+        let parent = value.parentRunId ?? existing?.parentRunId
+        let child = value.isChild ?? existing?.isChild ?? false
+        let thread = value.t3Thread ?? existing?.t3Thread
+        guard parent == nil || (run != nil && child && parent != run) else {
+            throw APIError(400, "parentRunId requires isChild true and a distinct runId")
+        }
+        if let old = existing?.runId, let new = value.runId, old != new {
+            throw APIError(409, "An active name already belongs to another runId")
+        }
+        if let old = existing?.parentRunId, let new = value.parentRunId, old != new {
+            throw APIError(409, "parentRunId cannot change within a run")
+        }
+        let retained = items + history + deletions.map(\.item) + closures.map(\.item)
+        var records: [UUID: ProgressItem] = [:]
+        for item in retained where item.id != existing?.id {
+            guard let id = item.runId else { continue }
+            if id == run { throw APIError(409, "runId already belongs to another task") }
+            records[id] = item
+        }
+        if let parent, let owner = records[parent], owner.t3Thread != thread {
+            throw APIError(409, "Parent and child must share the same chat destination")
+        }
+        if let run {
+            for item in records.values where item.parentRunId == run && item.t3Thread != thread {
+                throw APIError(409, "A waiting child has a different chat destination")
+            }
+        }
+        var cursor = parent
+        var seen = Set<UUID>()
+        while let id = cursor {
+            guard id != run, seen.insert(id).inserted else { throw APIError(409, "Run relationships must not contain cycles") }
+            cursor = records[id]?.parentRunId
+        }
     }
 
     private static func record(_ description: String?, progress: Double, on item: inout ProgressItem, now: Date) {

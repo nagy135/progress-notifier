@@ -6,7 +6,11 @@ final class ProgressModel: ObservableObject {
     @Published private(set) var items: [ProgressItem] = []
     @Published private(set) var recalledItems: [ProgressItem] = []
     @Published var isFocused = false
-    var displayItems: [ProgressItem] { registry.visibleItems.filter { !$0.completing } + recalledItems }
+    var timelineEntries: [ChatTimeline.Entry] {
+        ChatTimeline.entries(visible: registry.visibleItems.filter { !$0.completing } + recalledItems,
+                             retained: registry.items + registry.history + registry.deletions.map(\.item) + registry.closures.map(\.item))
+    }
+    var displayItems: [ProgressItem] { timelineEntries.map(\.item) }
     var hasHistory: Bool { !registry.history.isEmpty }
     private let registry: ProgressRegistry
     private let stateURL: URL
@@ -73,7 +77,7 @@ final class ProgressModel: ObservableObject {
         // Standard clients encode query spaces as +; an actual plus arrives as %2B.
         url.percentEncodedQuery = url.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%20")
         if url.path == "/health", request.method == "GET" {
-            return HTTPResponse(["app": "progress-notifier", "version": "1.5.0", "status": "ok"])
+            return HTTPResponse(["app": "progress-notifier", "version": "1.6.0", "status": "ok"])
         }
         guard url.path == "/items" else { return HTTPResponse(404, ["error": "Unknown endpoint"]) }
         switch request.method {
@@ -88,6 +92,10 @@ final class ProgressModel: ObservableObject {
                      "progress": entry.progress, "recordedAt": timestamp.string(from: entry.recordedAt)]
                 }
                 value["updateCount"] = $0.updates.count
+                value["id"] = $0.id.uuidString
+                if let createdAt = $0.createdAt { value["createdAt"] = timestamp.string(from: createdAt) }
+                if let run = $0.runId { value["runId"] = run.uuidString }
+                if let parent = $0.parentRunId { value["parentRunId"] = parent.uuidString }
                 value["isChild"] = $0.isChild
                 if let latest = $0.updates.first { value["description"] = latest.description }
                 if let project = $0.project { value["project"] = project }
@@ -114,7 +122,7 @@ final class ProgressModel: ObservableObject {
                 let update: ProgressUpdate
                 do { update = try JSONDecoder().decode(ProgressUpdate.self, from: request.body).validated() }
                 catch let error as APIError { throw error }
-                catch { throw APIError(400, "Expected JSON: name (string), progress (0–100), etaSeconds (seconds remaining); optional description and project must be strings, projectIcon must be a T3 project icon object, isChild must be a boolean, and t3Thread must contain environmentId and threadId strings") }
+                catch { throw APIError(400, "Expected JSON: name (string), progress (0–100), etaSeconds (seconds remaining); optional description and project must be strings, projectIcon must be a T3 project icon object, isChild must be a boolean, runId and parentRunId must be UUID strings, and t3Thread must contain environmentId and threadId strings") }
                 // Deleted updates acknowledge receipt without saving, publishing, or feedback.
                 guard !registry.isDeleted(update) else { return HTTPResponse(["ok": true]) }
                 let wasCompleting = registry.item(for: update)?.completing ?? false

@@ -78,17 +78,15 @@ The indicator disappears while that task’s description ledger is unfolded. Pre
 while the panel has focus, or click **Show updates**,
 to unfold the ledger for the **focused task only**. Select the next task with Down or
 J, and the previous task with Up or K. A mint outline marks selection in expanded mode.
-In compact mode, a small matching dot after the bar marks selection; Up/Down and J/K
+In compact mode, a mint outline and small matching dot after the bar mark selection; Up/Down and J/K
 move it just as in expanded mode. Expanding keeps the selected task. Navigation stops at the first and last tasks. Progress updates and
 new tasks keep the same selection; removing the focused task selects its next neighbor,
 or the previous one when it was last.
 
-When two or more visible tasks share the same T3 environment and thread ID, they
-show a matching outline symbol beside their project icon: circle, triangle, square,
-or diamond. In compact mode the symbol sits between the icon and progress bar.
-Up to four shared thread groups receive symbols; additional groups remain unmarked
-until a slot becomes free. Symbols stay assigned while a group remains visible,
-including across reordering and mode changes. Visible completed results count too.
+Tasks sharing the same T3 environment and thread ID form a chronological timeline.
+A rail with downward continuation arrows links main runs; indented purple branches
+mark child tasks. This replaces the former four-symbol grouping limit. Visible
+completed results join their original timeline position. See Chat timelines below.
 
 Press **Enter** (or keypad Enter) to focus T3 Code and open the selected task's
 originating thread, in either mode and for recalled results. The app targets
@@ -109,7 +107,7 @@ Agents get `environmentId` from T3's `t3_environment_read` and `currentThreadId`
 chat and send that thread ID instead; forks keep their own destination. Parents pass
 the resolved destination and project metadata in delegate briefs so children can link
 their cards even without T3 tools. Separate task names preserve each delegate's
-progress; a shared destination connects the cards' symbols and Enter shortcut.
+progress; a shared destination groups the cards and supplies the Enter shortcut.
 Provider conversation IDs such as `CODEX_THREAD_ID` are different.
 The shared skill supplies this metadata automatically for T3 runs. Existing cards
 can be linked by sending both flags on their next update. No T3 Code changes or
@@ -178,6 +176,44 @@ symbol beside the project icon in both modes. The marker survives omitted fields
 completion, relaunch, and history recall; new runs default to regular tasks.
 `--no-child` clears a mistaken marker. Chat navigation still targets the parent
 chat, independently of this marker.
+
+## Chat timelines and child ownership
+
+Cards linked to the same `t3Thread` environment/thread pair now stay together.
+Main runs are ordered by creation, older above newer, with small downward arrows
+on the rail toward the next main run. Children branch underneath their owning run;
+late delegates stay with their original owner after another followup starts.
+Expanded completed cards become short receipts; D opens their saved details.
+Compact mode retains the same sequence, rail and child indentation. Per-task
+progress and ETA remain independent; no combined percentage is shown.
+
+The additive API fields `runId` and `parentRunId` are optional UUID strings. Generate
+one runId before the initial update and reuse it. Main followups get fresh IDs and
+the same chat destination, with no parentRunId. Each child gets its own ID,
+`isChild:true`, and its spawning agent's runId as parentRunId. Unknown parents are
+allowed; hidden or unavailable parents leave a labeled detached branch. Legacy
+children without explicit ownership remain visibly unassigned. Name-based update,
+delete and undo behavior remains unchanged; concurrent task names must be unique.
+Assigned IDs are immutable; conflicts, duplicate IDs, cycles and known cross-chat
+edges are rejected. Old clients and snapshots continue to work. GET /items also
+returns item id, createdAt and the optional run relationship fields.
+
+```sh
+# Generate once; reuse on every update, including completion.
+progress_run_id="$(uuidgen)"
+./scripts/progress-notify 'Build release' 0 180 --run-id "$progress_run_id" \
+  --description 'Preparing build' --project progress-notifier \
+  --t3-environment-id '<environmentId>' --t3-thread-id '<resolvedChatThreadId>'
+# A delegate generates its own UUID and receives the parent's UUID in its brief.
+./scripts/progress-notify 'Review release' 0 120 --child --run-id '<child UUID>' \
+  --parent-run-id "$progress_run_id" --description 'Reviewing release' \
+  --t3-environment-id '<environmentId>' --t3-thread-id '<resolvedChatThreadId>'
+```
+
+C, X, Z and relaunch keep their existing visibility rules; grouping never recalls
+hidden results. H reveals the newest hidden completion and inserts it into its
+chat's chronological position. Keyboard selection follows the rendered order and
+survives progress updates. Closing or deleting a parent does not hide its children.
 
 ## Agent skill
 

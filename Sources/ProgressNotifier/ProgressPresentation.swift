@@ -15,6 +15,8 @@ final class ProgressPresentation: ObservableObject {
         var presence: CGFloat
         var detailsHeight: CGFloat = 64
         var historyHeight: CGFloat = 0
+        var timeline: ChatTimeline.Entry?
+        var receipt = false
         var threadGroupSymbol: ThreadGroupSymbol?
         var id: UUID { item.id }
     }
@@ -51,7 +53,7 @@ final class ProgressPresentation: ObservableObject {
     var chromeHeight: CGFloat { 36 + 44 * expansion + 30 * expansion * updatesControlPresence }
     var naturalContentHeight: CGFloat {
         let rowHeight = rows.reduce(CGFloat.zero) { total, row in
-            total + row.presence * (20 + (row.detailsHeight + 22 + row.historyHeight) * expansion)
+            total + row.presence * rowHeight(row)
         }
         return rowHeight + rows.indices.reduce(CGFloat.zero) { $0 + spacing(before: $1) }
             + 8 * expansion * (1 - emptyPresence)
@@ -59,20 +61,25 @@ final class ProgressPresentation: ObservableObject {
     }
     func spacing(before index: Int) -> CGFloat {
         guard index > 0 else { return 0 }
-        return (2 + 4 * expansion) * min(rows[index].presence, rows[index - 1].presence)
+        let boundary = rows[index].timeline?.startsGroup == true ? 10 + 6 * expansion : 0
+        return (2 + 4 * expansion + boundary) * min(rows[index].presence, rows[index - 1].presence)
     }
 
     var contentHeight: CGFloat { min(naturalContentHeight, max(0, maximumHeight - chromeHeight)) }
     var windowHeight: CGFloat { chromeHeight + contentHeight }
     var needsScrolling: Bool { naturalContentHeight > maximumHeight - chromeHeight + 0.5 }
 
-    func update(items: [ProgressItem], compact: Bool, animated: Bool) {
+    func update(items: [ProgressItem], compact: Bool, animated: Bool, timeline: [ChatTimeline.Entry]? = nil) {
         isCompact = compact
         let previousIndex = desiredItems.firstIndex(where: { $0.id == rememberedItemID }) ?? 0
         desiredItems = items
         updateThreadGroupSymbols(items)
         if !items.contains(where: { $0.id == rememberedItemID }) {
-            rememberedItemID = items.isEmpty ? nil : items[min(previousIndex, items.count - 1)].id
+            if rememberedItemID == nil, timeline != nil, let active = items.first(where: { !$0.completing && !$0.isChild }) {
+                rememberedItemID = active.id
+            } else {
+                rememberedItemID = items.isEmpty ? nil : items[min(previousIndex, items.count - 1)].id
+            }
         }
         expandedItemIDs.formIntersection(items.map(\.id))
         if updatesFollowFocus, let rememberedItemID {
@@ -80,12 +87,15 @@ final class ProgressPresentation: ObservableObject {
         }
         if items.isEmpty { updatesFollowFocus = false }
         targetExpansion = compact ? 0 : 1
+        let entries = Dictionary(uniqueKeysWithValues: (timeline ?? []).map { ($0.item.id, $0) })
         let existing = Dictionary(uniqueKeysWithValues: rows.map { ($0.id, $0) })
         let desiredIDs = Set(items.map(\.id))
         var nextRows = items.map { item -> Row in
             var row = existing[item.id] ?? Row(item: item, presence: 0)
             row.item = item
-            row.threadGroupSymbol = item.t3Thread.flatMap { threadGroupSymbols[$0] }
+            row.timeline = entries[item.id].flatMap { $0.item.t3Thread == nil ? nil : $0 }
+            row.receipt = row.timeline != nil && item.completing && !self.showsUpdates(for: item.id)
+            row.threadGroupSymbol = row.timeline == nil ? item.t3Thread.flatMap { threadGroupSymbols[$0] } : nil
             return row
         }
         // Keep departing cards alive until their space and opacity have reached zero.
@@ -175,7 +185,16 @@ final class ProgressPresentation: ObservableObject {
     }
 
     func rowHeight(_ row: Row) -> CGFloat {
-        20 + (row.detailsHeight + 22 + row.historyHeight) * expansion
+        headerHeight(row) + 20 + (row.detailsHeight + (row.receipt ? -2 : 22) + row.historyHeight) * expansion
+    }
+
+    func headerHeight(_ row: Row) -> CGFloat {
+        row.timeline?.startsGroup == true ? 26 * expansion : 0
+    }
+
+    static func timelineInset(_ row: Row) -> CGFloat {
+        guard let entry = row.timeline else { return 0 }
+        return 16 + CGFloat(min(entry.depth, 2)) * 12
     }
 
     private func animate(animated: Bool) {
@@ -198,6 +217,7 @@ final class ProgressPresentation: ObservableObject {
         let targetRows = rows.map { row -> Row in
             var target = row
             target.presence = desiredIDs.contains(row.id) ? 1 : 0
+            target.receipt = target.timeline != nil && target.item.completing && !showsUpdates(for: row.id)
             target.detailsHeight = measuredHeights[row.id] ?? row.detailsHeight
             target.historyHeight = showsUpdates(for: row.id) ? measuredHistoryHeights[row.id] ?? 0 : 0
             return target

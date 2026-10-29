@@ -7,12 +7,13 @@ description: Show and update floating progress cards in the local Progress Notif
 
 Use the bundled `scripts/progress-notify` client on the Mac (requires Python 3). It sends updates only when Progress Notifier is already running. If the app is stopped or unavailable, the client silently succeeds without sending anything. Do not launch, build, install, retry, or ask the user to start the app as part of reporting progress. The user chooses when to open `/Applications/Progress Notifier.app`.
 
-## One run, one task group
+## One run, one card; one chat, one timeline
 
 Create **one task/card for the agent's run** and use its **exact same `name` on every
-update**, from the first update through completion. That name is the grouping key:
-all descriptions and recorded percentages are stored under that one task. The project
-label is display metadata; it does not group different task names into one ledger.
+update**, from the first update through completion. That name routes updates to one ledger:
+all descriptions and recorded percentages are stored under that one task. The shared
+T3 destination groups different runs into a chat timeline. The project label is display
+metadata; it does not group different task names into one ledger.
 
 Choose a stable task title describing the whole job, unique among concurrent agents.
 Do not rename it to the current phase, create a new task for each milestone, or put
@@ -63,6 +64,60 @@ tools nor an explicit parent destination are available, send an ordinary unlinke
 notification. Omitted destinations are preserved by subsequent updates, including
 completion, so the flags are needed only on the first update (or when correcting it).
 
+### Identify runs and link the timeline
+
+Generate **one UUID before the initial notification**, for example with `uuidgen`,
+and remember it as this run's `--run-id`. Reuse that exact UUID on **every update**,
+including completion; never generate a new UUID per client invocation. Run IDs are
+client-generated so delegation still works when the app is stopped and the initial
+notification is skipped. Do not use a T3 chat ID or provider session ID as a run ID.
+
+A new user followup starts a new main run: choose a stable title, generate a fresh
+run ID, and send the **same resolved T3 destination**. Milestones and conversation
+compaction continue the existing run ID and exact task name. Main followups omit
+`--parent-run-id`; sequence is not delegation. Names still must be unique among
+concurrent runs because the API continues to route updates by name.
+
+```sh
+# Generate once and retain for this entire run, including after compaction.
+progress_run_id="$(uuidgen)"
+~/.agents/skills/progress-notifier/scripts/progress-notify 'Build release' 0 180 \
+  --run-id "$progress_run_id" --project 'progress-notifier' \
+  --description 'Preparing the release build' \
+  --t3-environment-id '<environmentId>' --t3-thread-id '<resolvedChatThreadId>'
+```
+
+When delegating, explicitly include **your run ID** as the child's parent run ID,
+alongside the resolved user-facing chat destination and project metadata. The child
+generates its own UUID and sends `--child --run-id '<its UUID>' --parent-run-id
+'<spawning agent UUID>'` on its initial notification. Reuse these flags on updates.
+Nested children receive their immediate spawning agent's run ID, while keeping the
+same root chat destination. Children must never copy their parent's ID as their own.
+If no reliable parent run ID is supplied, keep `--child` and omit `--parent-run-id`;
+never guess ownership from task names, shared destinations or the newest main card.
+
+The optional API fields are UUID strings `runId` and `parentRunId`. Omission
+preserves assigned values. Parent links require a distinct runId and `isChild:true`;
+assigned IDs are immutable for that run. Conflicting IDs, cycles and cross-chat
+parent links are rejected. Unknown parents are allowed for out-of-order delivery.
+`GET /items` returns these fields when present, plus the stored item `id` and
+`createdAt`. The run ID is correlation metadata, not a replacement for name-based
+updates, deletion or undo. Old clients and saved tasks remain supported.
+
+Linked chat cards stay together. Main runs read from older to newer, with small
+downward arrowheads along the rail toward the next main run. Child tasks branch
+beneath their explicit owner, even when a newer followup starts. Their indentation,
+bent connectors and Child label distinguish delegation in both modes. Completed
+linked tasks become short receipts; select one and press D for its full details and
+notes. No combined percentage is calculated. A missing/hidden parent leaves a
+labeled detached branch; legacy children without a parent link remain unassigned.
+
+Only visible history is grouped: C/X/Z and relaunch do not automatically recall
+old results. H still recalls one result newest first, then places it chronologically
+in its chat. Up/Down and J/K follow the visible task order, skipping chat headings;
+selection stays on the same card during updates and mode changes. Enter opens the
+existing chat destination. Closing or deleting a parent affects that card only.
+
 ### Identify child/delegate tasks
 
 Every spawned delegate or subagent must pass **`--child` on its initial update**,
@@ -75,7 +130,7 @@ not imply a child. Ordinary user-facing runs and forks omit the flag.
 The API field is optional `"isChild":true`. Omission preserves the marker on
 later updates and completion; saved state and recalled history retain it. A new
 run defaults to a regular task. Use `--no-child` (`"isChild":false`) only to
-correct a mistaken marker. Keep the stable task name unchanged.
+correct a mistaken unparented marker; a linked child cannot change role within its run. Keep the stable task name unchanged.
 
 When delegating, explicitly tell each child to use `--child` on its own initial
 card and to pass that instruction to any nested delegates, alongside the shared
@@ -83,7 +138,8 @@ progress destination and project metadata. For example:
 
 ```sh
 ~/.agents/skills/progress-notifier/scripts/progress-notify 'Review release' 0 120 \
-  --child --project 'progress-notifier' --description 'Reviewing the release changes' \
+  --child --run-id '<child UUID>' --parent-run-id '<spawning agent UUID>' \
+  --project 'progress-notifier' --description 'Reviewing the release changes' \
   --t3-environment-id '<environmentId>' --t3-thread-id '<resolvedChatThreadId>'
 ```
 
@@ -91,7 +147,8 @@ When delegating work, include the resolved progress destination and project meta
 in each delegate's task brief, instructing it to use these for its initial progress
 card. Pass the same destination through nested delegation. Each delegate keeps its
 own unique, stable task name; sharing the destination makes Enter open the parent
-chat and gives related cards the same thread-group symbol without merging progress.
+chat and groups related cards in one timeline without merging progress. Pass your run ID
+as the parent run ID so each child branches from its actual owner.
 
 ```sh
 ~/.agents/skills/progress-notifier/scripts/progress-notify 'Build release' 0 180 \

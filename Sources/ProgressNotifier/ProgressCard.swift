@@ -57,7 +57,8 @@ private struct ProgressPalette {
         colorScheme == .light ? Color(red: 0.04, green: 0.43, blue: 0.37) : .mint
     }
 
-    func progress(completing: Bool) -> Color {
+    func progress(completing: Bool, isChild: Bool = false) -> Color {
+        if isChild && !completing { return .purple }
         if colorScheme == .light {
             return completing ? Color(red: 0.09, green: 0.45, blue: 0.28) : accent
         }
@@ -70,7 +71,7 @@ private struct ItemProgressBar: View {
 
     @Environment(\.colorScheme) private var colorScheme
     private var palette: ProgressPalette { ProgressPalette(colorScheme: colorScheme) }
-    private var tint: Color { palette.progress(completing: item.completing) }
+    private var tint: Color { palette.progress(completing: item.completing, isChild: item.isChild) }
 
     var body: some View {
         GeometryReader { proxy in
@@ -225,10 +226,14 @@ private struct ItemCard: View {
     let panelFocused: Bool
     let updatesUnfolded: Bool
     let threadGroupSymbol: ThreadGroupSymbol?
+    var receipt = false
+    var grouped = false
+    var detailWidth: CGFloat = ProgressCard.detailsWidth
+    var parentLabel: String? = nil
 
     @Environment(\.colorScheme) private var colorScheme
     private var palette: ProgressPalette { ProgressPalette(colorScheme: colorScheme) }
-    private var tint: Color { palette.progress(completing: item.completing) }
+    private var tint: Color { palette.progress(completing: item.completing, isChild: item.isChild) }
     private var detailOpacity: Double { Double(max(0, (expansion - 0.25) / 0.75)) }
     private var timing: String {
         let estimate = item.completing ? "Complete" : remaining(item.expectedFinish.timeIntervalSince(now))
@@ -238,19 +243,22 @@ private struct ItemCard: View {
     private var latest: ProgressEntry? { item.updates.first }
     private var earlierUpdateCount: Int { max(0, item.updates.count - 1) }
     private var noteMatchesProgress: Bool { latest?.progress == item.progress }
-    private var completionHeaderHeight: CGFloat { item.completing ? 32 : 0 }
+    private var completionHeaderHeight: CGFloat { item.completing && !receipt ? 32 : 0 }
     private var iconWidth: CGFloat { 22 + (threadGroupSymbol == nil ? 0 : 16) + (item.isChild ? 16 : 0) }
 
-    private var details: some View {
+    private var fullDetails: some View {
         VStack(alignment: .leading, spacing: 2) {
-            if let project = item.project {
+            if let project = item.project, !grouped {
                 Text(project).font(.system(size: 10, weight: .medium))
                     .foregroundStyle(.secondary).lineLimit(1)
                     .frame(height: 16).padding(.leading, iconWidth).padding(.trailing, 26)
             }
             Text(item.name).font(.system(size: 13, weight: .semibold))
                 .lineLimit(2).padding(.trailing, 30)
-                .padding(.leading, item.project == nil ? iconWidth : 0)
+                .padding(.leading, item.project == nil || grouped ? iconWidth : 0)
+            if let parentLabel, item.isChild {
+                Text("↳ \(parentLabel)").font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(1)
+            }
             HStack(spacing: 5) {
                 if item.isChild {
                     Text("Child").font(.system(size: 9, weight: .semibold))
@@ -272,7 +280,7 @@ private struct ItemCard: View {
             }
         }
         // Measure at the final text width, and center completion over the whole card.
-        .frame(width: ProgressCard.detailsWidth, alignment: .leading)
+        .frame(width: detailWidth, alignment: .leading)
         .padding(.top, completionHeaderHeight)
         .overlay(alignment: .top) {
             if item.completing {
@@ -282,6 +290,17 @@ private struct ItemCard: View {
                     .foregroundStyle(.white, palette.progress(completing: true))
                     .accessibilityLabel("Completed")
             }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var details: some View {
+        Group {
+            if receipt {
+                Text(item.name).font(.system(size: 11, weight: .medium)).lineLimit(1)
+                    .padding(.leading, iconWidth).padding(.trailing, 25)
+                    .frame(width: detailWidth, alignment: .leading)
+            } else { fullDetails }
         }
         .fixedSize(horizontal: false, vertical: true)
         .background(GeometryReader { proxy in
@@ -296,7 +315,7 @@ private struct ItemCard: View {
                 SnapshotRow(entry: entry, now: now)
             }
         }
-        .frame(width: ProgressCard.detailsWidth, alignment: .leading)
+        .frame(width: detailWidth, alignment: .leading)
         .fixedSize(horizontal: false, vertical: true)
         .background(GeometryReader { proxy in
             Color.clear.preference(key: ItemHistoryHeightsKey.self, value: [item.id: proxy.size.height])
@@ -310,12 +329,12 @@ private struct ItemCard: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .opacity(detailOpacity).clipped()
                 .accessibilityHidden(expansion < 0.5)
-                .padding(.bottom, 8 * expansion)
+                .padding(.bottom, (receipt ? 2 : 8) * expansion)
             HStack(spacing: 0) {
                 Color.clear
                     .frame(width: blend(iconWidth, latest == nil ? 0 : 38, expansion), height: 16)
                     .overlay(alignment: .leading) {
-                        if earlierUpdateCount > 0 {
+                        if earlierUpdateCount > 0 && !receipt {
                             HStack(spacing: 3) {
                                 Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold))
                                 Text("\(earlierUpdateCount)").font(.system(size: 10, weight: .medium)).monospacedDigit()
@@ -339,12 +358,12 @@ private struct ItemCard: View {
                 Text("\(item.progress, specifier: "%.0f")%")
                     .font(.system(size: 13, weight: .semibold, design: .rounded))
                     .monospacedDigit().foregroundStyle(tint)
-                    .frame(width: 38 * expansion, alignment: .trailing)
-                    .padding(.leading, 8 * expansion)
-                    .opacity(detailOpacity).clipped()
+                    .frame(width: receipt ? 0 : 38 * expansion, alignment: .trailing)
+                    .padding(.leading, receipt ? 0 : 8 * expansion)
+                    .opacity(receipt ? 0 : detailOpacity).clipped()
                     .accessibilityHidden(expansion < 0.5)
             }
-            .frame(height: blend(ProgressCard.compactRowHeight, 16, expansion))
+            .frame(height: blend(ProgressCard.compactRowHeight, receipt ? 4 : 16, expansion))
             earlierUpdates
                 .frame(width: 0, height: historyHeight * expansion, alignment: .topLeading)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -354,10 +373,15 @@ private struct ItemCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 12 * expansion)
-        .padding(.vertical, 9 * expansion)
+        .padding(.vertical, (receipt ? 6 : 9) * expansion)
         .overlay(alignment: .topLeading) {
             HStack(spacing: 4) {
-                ProjectIconView(project: item.project ?? item.name, icon: item.projectIcon)
+                if receipt {
+                    Image(systemName: "checkmark.circle.fill").font(.system(size: 14)).foregroundStyle(tint)
+                        .frame(width: 18, height: 16).accessibilityLabel("Completed")
+                } else {
+                    ProjectIconView(project: item.project ?? item.name, icon: item.projectIcon)
+                }
                 if item.isChild {
                     Image(systemName: "arrow.turn.down.right")
                         .font(.system(size: 10, weight: .semibold))
@@ -374,7 +398,7 @@ private struct ItemCard: View {
                 }
             }
                 .padding(.leading, 12 * expansion)
-                .padding(.top, blend((ProgressCard.compactRowHeight - 16) / 2, 9 + completionHeaderHeight, expansion))
+                .padding(.top, blend((ProgressCard.compactRowHeight - 16) / 2, (receipt ? 6 : 9) + completionHeaderHeight, expansion))
                 .allowsHitTesting(false)
         }
         .overlay(alignment: .topTrailing) {
@@ -385,11 +409,18 @@ private struct ItemCard: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Close \(item.name)")
             .modifier(ExcludeFromCardClicks(enabled: expansion > 0.95))
-            .padding(.trailing, 12 * expansion).padding(.top, 9 * expansion)
+            .padding(.trailing, 12 * expansion).padding(.top, (receipt ? 2 : 9) * expansion)
             .opacity(detailOpacity).allowsHitTesting(expansion > 0.95)
             .accessibilityHidden(expansion < 0.5)
         }
         .background(.primary.opacity(0.035 * expansion), in: RoundedRectangle(cornerRadius: 12))
+        .overlay {
+            if item.isChild && grouped {
+                RoundedRectangle(cornerRadius: blend(4, 12, expansion))
+                    .strokeBorder(Color.purple.opacity(0.3 * Double(expansion)), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                    .allowsHitTesting(false)
+            }
+        }
         .modifier(UpdatePulse(revision: revision, consumeUpdatePulse: consumeUpdatePulse,
                               tint: tint, cornerRadius: blend(4, 12, expansion),
                               borderOpacity: Double(expansion),
@@ -399,12 +430,52 @@ private struct ItemCard: View {
                 .fill(palette.accent.opacity(selected ? 0.055 * Double(expansion) : 0))
                 .overlay {
                     RoundedRectangle(cornerRadius: blend(4, 12, expansion))
-                        .strokeBorder(palette.accent.opacity(selected ? (panelFocused ? 0.9 : 0.6) * Double(expansion) : 0))
+                        .strokeBorder(palette.accent.opacity(selected ? (panelFocused ? 0.9 : 0.6) : 0))
                 }
                 .allowsHitTesting(false)
         }
         .accessibilityAddTraits(selected ? .isSelected : [])
 
+    }
+}
+
+private struct TimelineRail: View {
+    let depth: Int
+    let endsGroup: Bool
+    let continuesBelow: Bool
+    let expansion: CGFloat
+    let rowHeight: CGFloat
+
+    var body: some View {
+        Canvas { context, _ in
+            let mainX: CGFloat = 5
+            let nodeY: CGFloat = 10 + 4 * expansion
+            let bottom = rowHeight + (endsGroup ? 0 : 2 + 4 * expansion)
+            var rail = Path()
+            rail.move(to: CGPoint(x: mainX, y: 0))
+            rail.addLine(to: CGPoint(x: mainX, y: endsGroup ? nodeY : bottom))
+            context.stroke(rail, with: .color(.secondary.opacity(0.3)), lineWidth: 1)
+            if depth > 0 {
+                let branchX = 5 + CGFloat(min(depth, 2)) * 12
+                var branch = Path()
+                branch.move(to: CGPoint(x: branchX, y: 0))
+                branch.addLine(to: CGPoint(x: branchX, y: nodeY))
+                branch.addLine(to: CGPoint(x: branchX + 7, y: nodeY))
+                context.stroke(branch, with: .color(.purple.opacity(0.65)), lineWidth: 1)
+            } else {
+                context.stroke(Path(ellipseIn: CGRect(x: mainX - 2.5, y: nodeY - 2.5, width: 5, height: 5)),
+                               with: .color(.mint.opacity(0.8)), lineWidth: 1)
+            }
+            if continuesBelow {
+                let y = rowHeight - 2
+                var arrow = Path()
+                arrow.move(to: CGPoint(x: mainX - 3, y: y - 3))
+                arrow.addLine(to: CGPoint(x: mainX, y: y))
+                arrow.addLine(to: CGPoint(x: mainX + 3, y: y - 3))
+                context.stroke(arrow, with: .color(.mint), lineWidth: 1)
+            }
+        }
+        .frame(width: 44, height: max(0, rowHeight + (endsGroup ? 0 : 2 + 4 * expansion)), alignment: .topLeading)
     }
 }
 
@@ -457,14 +528,7 @@ struct ProgressCard: View {
                     TimelineView(.periodic(from: .now, by: 1)) { context in
                         VStack(alignment: .leading, spacing: 0) {
                             ForEach(Array(presentation.rows.enumerated()), id: \.element.id) { index, row in
-                                ItemCard(item: row.item, revision: model.revision(for: row.item),
-                                         consumeUpdatePulse: { model.consumeUpdatePulse(for: row.item) },
-                                         now: context.date, expansion: expansion,
-                                         close: { model.close(row.item) }, detailsHeight: row.detailsHeight,
-                                         historyHeight: row.historyHeight,
-                                         selected: presentation.focusedItemID == row.id, panelFocused: model.isFocused,
-                                         updatesUnfolded: presentation.showsUpdates(for: row.id),
-                                         threadGroupSymbol: row.threadGroupSymbol)
+                                timelineRow(row, now: context.date)
                                     .frame(width: blend(144, Self.expandedRowWidth, expansion), alignment: .leading)
                                     .fixedSize(horizontal: false, vertical: true)
                                     .frame(height: presentation.rowHeight(row) * row.presence,
@@ -484,6 +548,13 @@ struct ProgressCard: View {
                                     })
                                     .allowsHitTesting(row.presence > 0.95)
                                     .padding(.top, presentation.spacing(before: index))
+                                    .overlay(alignment: .topLeading) {
+                                        if row.timeline != nil && row.timeline?.startsGroup == false {
+                                            Rectangle().fill(.secondary.opacity(0.3))
+                                                .frame(width: 1, height: presentation.spacing(before: index))
+                                                .offset(x: 4.5).allowsHitTesting(false).accessibilityHidden(true)
+                                        }
+                                    }
                                     .id(row.id)
                             }
                             emptyState
@@ -575,6 +646,43 @@ struct ProgressCard: View {
         .simultaneousGesture(SpatialTapGesture().onEnded { value in
             if !(buttonFrames + itemFrames).contains(where: { $0.contains(value.location) }) { toggleCompact() }
         })
+    }
+
+    private func timelineRow(_ row: ProgressPresentation.Row, now: Date) -> some View {
+        let inset = ProgressPresentation.timelineInset(row)
+        let width = Self.expandedRowWidth - inset
+        return VStack(alignment: .leading, spacing: 0) {
+            if row.timeline?.startsGroup == true {
+                HStack(spacing: 6) {
+                    ProjectIconView(project: row.item.project ?? row.item.name, icon: row.item.projectIcon)
+                    Text(row.item.project ?? "T3 chat").font(.system(size: 10, weight: .medium)).lineLimit(1)
+                    Spacer(minLength: 4)
+                    Text(String(row.item.t3Thread?.threadId.suffix(6) ?? ""))
+                        .font(.system(size: 9, design: .monospaced)).foregroundStyle(.secondary)
+                }
+                .frame(height: presentation.headerHeight(row), alignment: .top)
+                .opacity(Double(expansion)).clipped().accessibilityHidden(expansion < 0.5)
+            }
+            ItemCard(item: row.item, revision: model.revision(for: row.item),
+                     consumeUpdatePulse: { model.consumeUpdatePulse(for: row.item) },
+                     now: now, expansion: expansion,
+                     close: { model.close(row.item) }, detailsHeight: row.detailsHeight,
+                     historyHeight: row.historyHeight,
+                     selected: presentation.focusedItemID == row.id, panelFocused: model.isFocused,
+                     updatesUnfolded: presentation.showsUpdates(for: row.id),
+                     threadGroupSymbol: row.threadGroupSymbol, receipt: row.receipt,
+                     grouped: row.timeline != nil, detailWidth: width - 24, parentLabel: row.timeline?.parentLabel)
+                .padding(.leading, inset)
+                .overlay(alignment: .topLeading) {
+                    if let entry = row.timeline {
+                        TimelineRail(depth: entry.depth, endsGroup: entry.endsGroup,
+                                     continuesBelow: entry.continuesBelow, expansion: expansion,
+                                     rowHeight: presentation.rowHeight(row) - presentation.headerHeight(row))
+                            .allowsHitTesting(false).accessibilityHidden(true)
+                    }
+                }
+        }
+        .help(row.item.name + (row.timeline?.parentLabel.map { " · Child of " + $0 } ?? ""))
     }
 
     private func selectItem(_ id: UUID, at point: CGPoint, openThread: Bool) {

@@ -432,7 +432,7 @@ private struct ItemCard: View {
                 .fill(palette.accent.opacity(selected ? 0.055 * Double(expansion) : 0))
                 .overlay {
                     RoundedRectangle(cornerRadius: blend(4, 12, expansion))
-                        .strokeBorder(palette.accent.opacity(selected ? (panelFocused ? 0.9 : 0.6) : 0))
+                        .strokeBorder(palette.accent.opacity(selected ? (panelFocused ? 0.9 : 0.6) * Double(expansion) : 0))
                 }
                 .allowsHitTesting(false)
         }

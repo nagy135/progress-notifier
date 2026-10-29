@@ -78,7 +78,7 @@ The indicator disappears while that task’s description ledger is unfolded. Pre
 while the panel has focus, or click **Show updates**,
 to unfold the ledger for the **focused task only**. Select the next task with Down or
 J, and the previous task with Up or K. A mint outline marks selection in expanded mode.
-In compact mode, a mint outline and small matching dot after the bar mark selection; Up/Down and J/K
+In compact mode, a small matching dot after the bar marks selection; Up/Down and J/K
 move it just as in expanded mode. Expanding keeps the selected task. Navigation stops at the first and last tasks. Progress updates and
 new tasks keep the same selection; removing the focused task selects its next neighbor,
 or the previous one when it was last.

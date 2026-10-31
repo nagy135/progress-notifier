@@ -113,7 +113,7 @@ final class TaskClickTests: XCTestCase {
 
         func click(row index: Int, count: Int = 1, closeButton: Bool = false) {
             let expansion = presentation.expansion
-            var top = 10 + ProgressCard.verticalInset(expansion: expansion) + 20 * expansion + 4 * expansion
+            var top = 10 + ProgressCard.verticalInset(expansion: expansion) + 22 * expansion + 4 * expansion
             for previous in 0..<index {
                 top += presentation.rowHeight(presentation.rows[previous]) + presentation.spacing(before: previous + 1)
             }

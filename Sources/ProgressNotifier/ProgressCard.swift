@@ -198,12 +198,12 @@ private struct SnapshotRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 6) {
             Text(updateAge(entry.recordedAt, now: now))
-                .font(.system(size: 7.5, weight: latest ? .medium : .regular)).monospacedDigit()
+                .font(.system(size: 8.5, weight: latest ? .medium : .regular)).monospacedDigit()
                 .foregroundStyle(latest ? palette.accent : Color.secondary)
                 .frame(width: 22, alignment: .leading).padding(.top, 2)
                 .accessibilityLabel(entry.recordedAt.formatted(date: .abbreviated, time: .standard))
             VStack(alignment: .leading, spacing: 3) {
-                Text(entry.description).font(.system(size: 9.5))
+                Text(entry.description).font(.system(size: 10.5))
                     .foregroundStyle(latest ? Color.primary : Color.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 if showMeter { SnapshotMeter(progress: entry.progress, current: latest) }
@@ -247,7 +247,7 @@ private struct ItemCard: View {
     private var completionHeaderHeight: CGFloat { item.completing && !receipt ? 24 : 0 }
     private var iconWidth: CGFloat { 22 + (threadGroupSymbol == nil ? 0 : 16) + (item.isChild ? 16 : 0) }
 
-    private var titleIconWidth: CGFloat { 16 + (threadGroupSymbol == nil ? 0 : 12) + (item.isChild ? 12 : 0) }
+    private var titleIconWidth: CGFloat { 17 + (threadGroupSymbol == nil ? 0 : 13) + (item.isChild ? 13 : 0) }
 
     private var fullDetails: some View {
         VStack(alignment: .leading, spacing: 1) {
@@ -256,7 +256,7 @@ private struct ItemCard: View {
                     .foregroundStyle(.secondary).lineLimit(1)
                     .frame(height: 12).padding(.leading, titleIconWidth).padding(.trailing, 26)
             }
-            Text(item.name).font(.system(size: 11, weight: .semibold))
+            Text(item.name).font(.system(size: 11.5, weight: .semibold))
                 .lineLimit(2).padding(.trailing, 20)
                 .padding(.leading, item.project == nil || grouped ? titleIconWidth : 0)
             if let parentLabel, item.isChild {
@@ -264,11 +264,11 @@ private struct ItemCard: View {
             }
             if let latest {
                 HStack(alignment: .top, spacing: 6) {
-                    Text(latest.description).font(.system(size: 9.5))
+                    Text(latest.description).font(.system(size: 10.5))
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Text(updateAge(latest.recordedAt, now: now))
-                        .font(.system(size: 7.5)).monospacedDigit().foregroundStyle(palette.accent)
+                        .font(.system(size: 8.5)).monospacedDigit().foregroundStyle(palette.accent)
                         .padding(.top, 2)
                         .accessibilityLabel(latest.recordedAt.formatted(date: .abbreviated, time: .standard))
                 }
@@ -328,10 +328,10 @@ private struct ItemCard: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .opacity(detailOpacity).clipped()
                 .accessibilityHidden(expansion < 0.5)
-                .padding(.bottom, 2 * expansion)
+                .padding(.bottom, (receipt ? 2 : 3) * expansion)
             HStack(spacing: 0) {
                 Color.clear
-                    .frame(width: blend(iconWidth, earlierUpdateCount > 0 ? 22 : 0, expansion), height: blend(16, 10, expansion))
+                    .frame(width: blend(iconWidth, earlierUpdateCount > 0 ? 22 : 0, expansion), height: blend(16, 12, expansion))
                     .overlay(alignment: .leading) {
                         if earlierUpdateCount > 0 && !receipt {
                             HStack(spacing: 3) {
@@ -347,20 +347,20 @@ private struct ItemCard: View {
                     }
                 HStack(spacing: 4) {
                     if item.isChild {
-                        Text("Child").font(.system(size: 7, weight: .semibold))
+                        Text("Child").font(.system(size: 8, weight: .semibold))
                             .padding(.horizontal, 4).padding(.vertical, 1)
                             .background(.primary.opacity(0.07), in: Capsule())
                             .accessibilityLabel("Child delegate task")
                     }
-                    Text(timing).font(.system(size: 8)).monospacedDigit()
+                    Text(timing).font(.system(size: 9)).monospacedDigit()
                         .lineLimit(1).minimumScaleFactor(0.85)
                 }
                 .foregroundStyle(.secondary)
-                .frame(width: receipt ? 0 : max(0, detailWidth - (earlierUpdateCount > 0 ? 22 : 0) - 100) * expansion,
+                .frame(width: receipt ? 0 : (item.isChild ? 106 : 76) * expansion,
                        alignment: .leading)
                 .opacity(detailOpacity).clipped()
                 .accessibilityHidden(receipt || expansion < 0.5)
-                ItemProgressBar(item: item, height: blend(5, 2, expansion))
+                ItemProgressBar(item: item, height: blend(5, 3, expansion))
                 // Reserve the same trailing space on every compact row so selecting
                 // a task never shifts its bar. Inset the dot from the selection
                 // outline as well as from the progress bar.
@@ -372,14 +372,14 @@ private struct ItemCard: View {
                     .padding(.trailing, 6 * (1 - expansion))
                     .allowsHitTesting(false).accessibilityHidden(true)
                 Text("\(item.progress, specifier: "%.0f")%")
-                    .font(.system(size: 9, weight: .semibold, design: .rounded))
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
                     .monospacedDigit().foregroundStyle(tint)
                     .frame(width: receipt ? 0 : 28 * expansion, alignment: .trailing)
                     .padding(.leading, receipt ? 0 : 8 * expansion)
                     .opacity(receipt ? 0 : detailOpacity).clipped()
                     .accessibilityHidden(expansion < 0.5)
             }
-            .frame(height: blend(ProgressCard.compactRowHeight, receipt ? 4 : 10, expansion))
+            .frame(height: blend(ProgressCard.compactRowHeight, receipt ? 4 : 12, expansion))
             earlierUpdates
                 .frame(width: 0, height: historyHeight * expansion, alignment: .topLeading)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -388,38 +388,38 @@ private struct ItemCard: View {
                 .accessibilityHidden(historyHeight < 0.5 || expansion < 0.5)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 6 * expansion)
-        .padding(.vertical, (receipt ? 6 : 4) * expansion)
+        .padding(.horizontal, 8 * expansion)
+        .padding(.vertical, (receipt ? 6 : 5) * expansion)
         .overlay(alignment: .topLeading) {
             HStack(spacing: blend(4, 3, expansion)) {
                 if receipt {
                     Image(systemName: "checkmark.circle.fill").font(.system(size: 14)).foregroundStyle(tint)
                         .frame(width: 18, height: 16).accessibilityLabel("Completed")
                 } else {
-                    ProjectIconView(project: item.project ?? item.name, icon: item.projectIcon, size: blend(16, 12, expansion))
+                    ProjectIconView(project: item.project ?? item.name, icon: item.projectIcon, size: blend(16, 13, expansion))
                 }
                 if item.isChild {
                     Image(systemName: "arrow.turn.down.right")
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(.secondary)
-                        .frame(width: blend(12, 9, expansion), height: blend(16, 12, expansion))
+                        .frame(width: blend(12, 10, expansion), height: blend(16, 13, expansion))
                         .accessibilityLabel("Child delegate task")
                 }
                 if let threadGroupSymbol {
                     Image(systemName: threadGroupSymbol.rawValue)
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(.secondary)
-                        .frame(width: blend(12, 9, expansion), height: blend(16, 12, expansion))
+                        .frame(width: blend(12, 10, expansion), height: blend(16, 13, expansion))
                         .accessibilityLabel(threadGroupSymbol.accessibilityLabel)
                 }
             }
-                .padding(.leading, 6 * expansion)
-                .padding(.top, blend((ProgressCard.compactRowHeight - 16) / 2, (receipt ? 6 : 4) + completionHeaderHeight, expansion))
+                .padding(.leading, 8 * expansion)
+                .padding(.top, blend((ProgressCard.compactRowHeight - 16) / 2, (receipt ? 6 : 5) + completionHeaderHeight, expansion))
                 .allowsHitTesting(false)
         }
         .overlay(alignment: .topTrailing) {
             Button(action: close) {
-                Image(systemName: "xmark").font(.system(size: 8, weight: .semibold))
+                Image(systemName: "xmark").font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(.secondary).frame(width: 22, height: 22).contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -501,8 +501,8 @@ struct ProgressCard: View {
     static let compactRowSpacing: CGFloat = 2
     // Reserve the native legacy scroller gutter even before overflow, so descriptions
     // never rewrap and historical percentages never clip when macOS shows the scroller.
-    static let expandedRowWidth: CGFloat = 324 - NSScroller.scrollerWidth(for: .regular, scrollerStyle: .legacy)
-    static let detailsWidth: CGFloat = expandedRowWidth - 12
+    static let expandedRowWidth: CGFloat = 334 - NSScroller.scrollerWidth(for: .regular, scrollerStyle: .legacy)
+    static let detailsWidth: CGFloat = expandedRowWidth - 16
 
     @ObservedObject var model: ProgressModel
     @ObservedObject var presentation: ProgressPresentation
@@ -519,26 +519,20 @@ struct ProgressCard: View {
     private var palette: ProgressPalette { ProgressPalette(colorScheme: colorScheme) }
 
     private var expansion: CGFloat { presentation.expansion }
-    private var runningCount: Int { model.displayItems.filter { !$0.completing }.count }
 
-    static func horizontalInset(expansion: CGFloat) -> CGFloat { blend(12, 9, expansion) }
-    static func verticalInset(expansion: CGFloat) -> CGFloat { blend(8, 7, expansion) }
+    static func horizontalInset(expansion: CGFloat) -> CGFloat { blend(12, 14, expansion) }
+    static func verticalInset(expansion: CGFloat) -> CGFloat { blend(8, 12, expansion) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text("Progress").font(.system(size: 13, weight: .semibold))
-                Spacer()
-                Text("\(runningCount) active")
-                    .font(.system(size: 8, weight: .medium)).foregroundStyle(.secondary)
-                    .padding(.horizontal, 6).padding(.vertical, 2)
-                    .background(.primary.opacity(0.05), in: Capsule())
-            }
-            .padding(.trailing, 32)
-            .frame(height: 18 * expansion, alignment: .top)
-            .opacity(Double(expansion)).clipped()
-            .padding(.bottom, 2 * expansion)
-            .accessibilityHidden(expansion < 0.5)
+            Image(systemName: "gauge.with.dots.needle.33percent")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.secondary)
+                .accessibilityLabel("Progress")
+                .frame(height: 18 * expansion, alignment: .center)
+                .opacity(Double(expansion)).clipped()
+                .padding(.bottom, 4 * expansion)
+                .accessibilityHidden(expansion < 0.5)
 
             ScrollViewReader { proxy in
                 ScrollView(.vertical, showsIndicators: presentation.needsScrolling) {
@@ -610,8 +604,8 @@ struct ProgressCard: View {
                 Spacer()
                 Text("↑↓  J/K").font(.system(size: 9))
             }
-            .font(.system(size: 8)).foregroundStyle(.secondary)
-            .frame(height: 16 * expansion * presentation.updatesControlPresence, alignment: .bottom)
+            .font(.system(size: 9)).foregroundStyle(.secondary)
+            .frame(height: 18 * expansion * presentation.updatesControlPresence, alignment: .bottom)
             .opacity(Double(expansion * presentation.updatesControlPresence)).clipped()
             .allowsHitTesting(expansion > 0.95 && presentation.updatesControlPresence > 0.95)
             .accessibilityHidden(expansion < 0.5 || presentation.updatesControlPresence < 0.5)
@@ -647,7 +641,7 @@ struct ProgressCard: View {
             .padding(.horizontal, Self.horizontalInset(expansion: expansion))
             // Keep the X centered on the first compact row despite its larger hit area.
             .padding(.top, Self.verticalInset(expansion: expansion)
-                     + (Self.compactRowHeight - 24) / 2 * (1 - expansion))
+                     + (Self.compactRowHeight - 24) / 2 * (1 - expansion) - 3 * expansion)
         }
         .padding(10)
         .coordinateSpace(name: "progressCard")
@@ -662,7 +656,7 @@ struct ProgressCard: View {
         .contentShape(Rectangle())
         .simultaneousGesture(SpatialTapGesture().onEnded { value in
             // Only the top chrome changes mode; blank space beside/below tasks does not.
-            let topHeight = 10 + Self.verticalInset(expansion: expansion) + 20 * expansion
+            let topHeight = 10 + Self.verticalInset(expansion: expansion) + 22 * expansion
             if value.location.y < topHeight,
                !(buttonFrames + itemFrames).contains(where: { $0.contains(value.location) }) {
                 toggleCompact()
@@ -676,8 +670,8 @@ struct ProgressCard: View {
         return VStack(alignment: .leading, spacing: 0) {
             if row.timeline?.startsGroup == true {
                 HStack(spacing: 6) {
-                    ProjectIconView(project: row.item.project ?? row.item.name, icon: row.item.projectIcon, size: 12)
-                    Text(row.item.project ?? "T3 chat").font(.system(size: 9, weight: .medium)).lineLimit(1)
+                    ProjectIconView(project: row.item.project ?? row.item.name, icon: row.item.projectIcon, size: 13)
+                    Text(row.item.project ?? "T3 chat").font(.system(size: 10, weight: .medium)).lineLimit(1)
                     Spacer(minLength: 4)
                     Text(String(row.item.t3Thread?.threadId.suffix(6) ?? ""))
                         .font(.system(size: 8, design: .monospaced)).foregroundStyle(.secondary)
@@ -693,7 +687,7 @@ struct ProgressCard: View {
                      selected: presentation.focusedItemID == row.id, panelFocused: model.isFocused,
                      updatesUnfolded: presentation.showsUpdates(for: row.id),
                      threadGroupSymbol: row.threadGroupSymbol, receipt: row.receipt,
-                     grouped: row.timeline != nil, detailWidth: width - 12,
+                     grouped: row.timeline != nil, detailWidth: width - 16,
                      parentLabel: row.timeline?.detached == true ? row.timeline?.parentLabel : nil)
                 .padding(.leading, inset)
                 .overlay(alignment: .topLeading) {
@@ -744,7 +738,7 @@ struct ProgressCard: View {
             Text("No progress").font(.system(size: 14, weight: .medium))
                 .frame(height: 17 * expansion).opacity(Double(expansion)).clipped()
             Text(model.hasHistory ? "Press H to recall a completed result" : "Waiting for tasks…")
-                .font(.system(size: 8)).foregroundStyle(.secondary)
+                .font(.system(size: 9)).foregroundStyle(.secondary)
                 .frame(height: 14 * expansion).opacity(Double(expansion)).clipped()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

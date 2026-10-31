@@ -48,9 +48,9 @@ final class ProgressPresentation: ObservableObject {
     deinit { timer?.invalidate() }
 
     // The empty compact card only needs room for its status icon and close button.
-    var cardWidth: CGFloat { 200 + 150 * expansion - 128 * emptyPresence * (1 - expansion) }
+    var cardWidth: CGFloat { 200 + 170 * expansion - 128 * emptyPresence * (1 - expansion) }
     var windowWidth: CGFloat { cardWidth + 20 }
-    var chromeHeight: CGFloat { 36 + 18 * expansion + 16 * expansion * updatesControlPresence }
+    var chromeHeight: CGFloat { 36 + 30 * expansion + 18 * expansion * updatesControlPresence }
     var naturalContentHeight: CGFloat {
         let rowHeight = rows.reduce(CGFloat.zero) { total, row in
             total + row.presence * rowHeight(row)
@@ -185,11 +185,11 @@ final class ProgressPresentation: ObservableObject {
     }
 
     func rowHeight(_ row: Row) -> CGFloat {
-        headerHeight(row) + 20 + (row.detailsHeight + (row.receipt ? -2 : 0) + row.historyHeight) * expansion
+        headerHeight(row) + 20 + (row.detailsHeight + (row.receipt ? -2 : 5) + row.historyHeight) * expansion
     }
 
     func headerHeight(_ row: Row) -> CGFloat {
-        row.timeline?.startsGroup == true ? 16 * expansion : 0
+        row.timeline?.startsGroup == true ? 18 * expansion : 0
     }
 
     static func timelineInset(_ row: Row) -> CGFloat {

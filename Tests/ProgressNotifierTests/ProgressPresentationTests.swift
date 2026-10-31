@@ -158,4 +158,52 @@ final class ProgressPresentationTests: XCTestCase {
         XCTAssertEqual(presentation.rows.count, 2)
         XCTAssertEqual(presentation.expansion, 0)
     }
+    func testTitleStyleKeepsDensitySelectionDetailsAndScreenLimit() throws {
+        let items = try (0..<12).map { try item("Long task title \($0)") }
+        let presentation = ProgressPresentation(compact: true, showTitles: true)
+        presentation.maximumHeight = 200
+        presentation.update(items: Array(items.prefix(2)), compact: true, animated: false, showTitles: true)
+        XCTAssertEqual(presentation.cardWidth, 280)
+        XCTAssertEqual(presentation.compactRowWidth, 224)
+        XCTAssertEqual(presentation.windowHeight, 78)
+        XCTAssertFalse(presentation.needsScrolling)
+        presentation.moveFocus(by: 1, animated: false)
+        presentation.setShowsUpdates(true, animated: false)
+        presentation.update(items: items, compact: true, animated: false, showTitles: true)
+        XCTAssertEqual(presentation.windowHeight, 200)
+        XCTAssertTrue(presentation.needsScrolling)
+        XCTAssertEqual(presentation.focusedItemID, items[1].id)
+        XCTAssertTrue(presentation.showsUpdates(for: items[1].id))
+        presentation.update(items: items, compact: true, animated: false)
+        XCTAssertEqual(presentation.cardWidth, 200)
+        XCTAssertEqual(presentation.titlePresence, 0)
+        XCTAssertEqual(presentation.focusedItemID, items[1].id)
+        presentation.update(items: [], compact: true, animated: false, showTitles: true)
+        XCTAssertEqual(presentation.cardWidth, 72, "Empty state should stay small in either style")
+    }
+
+    func testRapidTitleModeReversalsKeepWidthContinuous() throws {
+        try XCTSkipIf(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
+        let first = try item("Long task title")
+        let presentation = ProgressPresentation(compact: true)
+        presentation.update(items: [first], compact: true, animated: false)
+        presentation.measure([first.id: 60], animated: false)
+        let reversed = expectation(description: "Reverse title mode")
+        presentation.update(items: [first], compact: true, animated: true, showTitles: true)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+            let width = presentation.cardWidth
+            XCTAssertGreaterThan(width, 200)
+            XCTAssertLessThan(width, 280)
+            presentation.update(items: [first], compact: false, animated: true)
+            XCTAssertEqual(presentation.cardWidth, width)
+            presentation.update(items: [first], compact: true, animated: true)
+            XCTAssertEqual(presentation.cardWidth, width)
+            reversed.fulfill()
+        }
+        wait(for: [reversed], timeout: 2)
+        _ = settle(presentation) {}
+        XCTAssertEqual(presentation.cardWidth, 200)
+        XCTAssertEqual(presentation.titlePresence, 0)
+    }
+
 }

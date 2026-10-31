@@ -22,6 +22,7 @@ final class ProgressPresentation: ObservableObject {
     }
 
     static let transitionDuration: TimeInterval = 0.22
+    @Published private(set) var titlePresence: CGFloat
     @Published private(set) var expansion: CGFloat
     @Published private(set) var rows: [Row] = []
     @Published private(set) var emptyPresence: CGFloat = 1
@@ -33,13 +34,16 @@ final class ProgressPresentation: ObservableObject {
     var geometryChanged: (() -> Void)?
     private var desiredItems: [ProgressItem] = []
     private var threadGroupSymbols: [T3ThreadReference: ThreadGroupSymbol] = [:]
+    private var targetTitles: CGFloat
     private var targetExpansion: CGFloat
     private var measuredHeights: [UUID: CGFloat] = [:]
     private var measuredHistoryHeights: [UUID: CGFloat] = [:]
     private var timer: Timer?
     private var updatesFollowFocus = false
 
-    init(compact: Bool) {
+    init(compact: Bool, showTitles: Bool = false) {
+        titlePresence = compact && showTitles ? 1 : 0
+        targetTitles = compact && showTitles ? 1 : 0
         isCompact = compact
         expansion = compact ? 0 : 1
         targetExpansion = compact ? 0 : 1
@@ -48,7 +52,8 @@ final class ProgressPresentation: ObservableObject {
     deinit { timer?.invalidate() }
 
     // The empty compact card only needs room for its status icon and close button.
-    var cardWidth: CGFloat { 200 + 170 * expansion - 128 * emptyPresence * (1 - expansion) }
+    var cardWidth: CGFloat { 200 + 170 * expansion + 80 * titlePresence * (1 - emptyPresence) - 128 * emptyPresence * (1 - expansion) }
+    var compactRowWidth: CGFloat { 144 + 80 * titlePresence }
     var windowWidth: CGFloat { cardWidth + 20 }
     var chromeHeight: CGFloat { 36 + 30 * expansion + 18 * expansion * updatesControlPresence }
     var naturalContentHeight: CGFloat {
@@ -69,7 +74,8 @@ final class ProgressPresentation: ObservableObject {
     var windowHeight: CGFloat { chromeHeight + contentHeight }
     var needsScrolling: Bool { naturalContentHeight > maximumHeight - chromeHeight + 0.5 }
 
-    func update(items: [ProgressItem], compact: Bool, animated: Bool, timeline: [ChatTimeline.Entry]? = nil) {
+    func update(items: [ProgressItem], compact: Bool, animated: Bool, timeline: [ChatTimeline.Entry]? = nil, showTitles: Bool = false) {
+        targetTitles = compact && showTitles ? 1 : 0
         isCompact = compact
         let previousIndex = desiredItems.firstIndex(where: { $0.id == rememberedItemID }) ?? 0
         desiredItems = items
@@ -209,6 +215,7 @@ final class ProgressPresentation: ObservableObject {
             return row
         }
         let startRows = rows
+        let startTitles = titlePresence
         let startExpansion = expansion
         let startEmpty = emptyPresence
         let startControl = updatesControlPresence
@@ -227,6 +234,7 @@ final class ProgressPresentation: ObservableObject {
             var transaction = Transaction()
             transaction.disablesAnimations = true
             withTransaction(transaction) {
+                self.titlePresence = startTitles + (self.targetTitles - startTitles) * fraction
                 self.expansion = startExpansion + (self.targetExpansion - startExpansion) * fraction
                 self.updatesControlPresence = startControl + (targetControl - startControl) * fraction
                 self.emptyPresence = startEmpty + (targetEmpty - startEmpty) * fraction
@@ -250,7 +258,7 @@ final class ProgressPresentation: ObservableObject {
         guard rows.allSatisfy({ $0.presence > 0 || measuredHeights[$0.id] != nil || !desiredIDs.contains($0.id) }) else {
             return
         }
-        let needsAnimation = startExpansion != targetExpansion || startEmpty != targetEmpty || startControl != targetControl
+        let needsAnimation = startTitles != targetTitles || startExpansion != targetExpansion || startEmpty != targetEmpty || startControl != targetControl
             || zip(startRows, targetRows).contains { abs($0.presence - $1.presence) > 0.001
                 || abs($0.detailsHeight - $1.detailsHeight) > 0.5 || abs($0.historyHeight - $1.historyHeight) > 0.5 }
         guard needsAnimation else { apply(1); return }

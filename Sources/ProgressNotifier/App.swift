@@ -27,8 +27,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var keyboardMonitor: Any?
     private var windowHidden = false
     private var compact = UserDefaults.standard.bool(forKey: "compactMode")
+    private var compactTitles = UserDefaults.standard.bool(forKey: "compactTitles")
     private var placement = PanelPlacement(rawValue: UserDefaults.standard.string(forKey: "panelPlacement") ?? "") ?? .topRight
-    private let presentation = ProgressPresentation(compact: UserDefaults.standard.bool(forKey: "compactMode"))
+    private let presentation = ProgressPresentation(compact: UserDefaults.standard.bool(forKey: "compactMode"),
+                                                          showTitles: UserDefaults.standard.bool(forKey: "compactTitles"))
 
     init(model: ProgressModel = ProgressModel()) {
         self.model = model
@@ -99,7 +101,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             case "k": self.presentation.moveFocus(by: -1, animated: true); return nil
             case "q": self.hideProgress(); return nil
             case "m":
-                if !event.isARepeat { self.toggleCompact() }
+                if !event.isARepeat { self.toggleCompact(showTitles: event.modifierFlags.contains(.shift)) }
                 return nil
             case ".":
                 if !event.isARepeat { self.togglePlacement() }
@@ -167,15 +169,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel?.orderOut(nil)
     }
 
-    private func toggleCompact() {
-        // Keep mode and history shortcuts available after a background click.
+    func toggleCompact(showTitles: Bool = false) {
+        // Each shortcut expands its own compact style, or switches directly to that style.
         panel?.makeKeyAndOrderFront(nil)
-        setCompact(!compact)
-    }
-
-    private func setCompact(_ compact: Bool) {
-        self.compact = compact
+        compact = !(compact && compactTitles == showTitles)
+        compactTitles = showTitles
         UserDefaults.standard.set(compact, forKey: "compactMode")
+        UserDefaults.standard.set(compactTitles, forKey: "compactTitles")
         refreshPanel()
     }
 
@@ -308,7 +308,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             hosting.sizingOptions = []
             panel.contentView = hosting
         }
-        presentation.update(items: model.displayItems, compact: compact, animated: panel.isVisible, timeline: model.timelineEntries)
+        presentation.update(items: model.displayItems, compact: compact, animated: panel.isVisible, timeline: model.timelineEntries, showTitles: compactTitles)
         resizePanel(reposition: reposition)
         panel.orderFrontRegardless()
     }

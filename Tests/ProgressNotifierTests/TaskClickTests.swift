@@ -6,8 +6,8 @@ import ProgressCore
 
 final class TaskClickTests: XCTestCase {
     func testClickSelectsAndDoubleClickOpensClickedTaskInBothModes() throws {
-        for compact in [false, true] {
-            let fixture = try Fixture(compact: compact)
+        for (compact, titles) in [(false, false), (true, false), (true, true)] {
+            let fixture = try Fixture(compact: compact, showTitles: titles)
             defer { fixture.close() }
             XCTAssertTrue(fixture.host.acceptsFirstMouse(for: nil))
             fixture.click(row: 1)
@@ -69,7 +69,7 @@ final class TaskClickTests: XCTestCase {
         var modeToggles = 0
         private var timestamp = ProcessInfo.processInfo.systemUptime
 
-        init(compact: Bool) throws {
+        init(compact: Bool, showTitles: Bool = false) throws {
             _ = NSApplication.shared
             let registry = ProgressRegistry()
             for (index, name) in ["First", "Second", "Unlinked"].enumerated() {
@@ -81,8 +81,8 @@ final class TaskClickTests: XCTestCase {
             let stateURL = directory.appendingPathComponent("state.json")
             try JSONEncoder().encode(registry.snapshot).write(to: stateURL)
             model = ProgressModel(stateURL: stateURL)
-            presentation = ProgressPresentation(compact: compact)
-            presentation.update(items: model.displayItems, compact: compact, animated: false)
+            presentation = ProgressPresentation(compact: compact, showTitles: showTitles)
+            presentation.update(items: model.displayItems, compact: compact, animated: false, showTitles: showTitles)
             // Install callbacks after initialization so they can capture the fixture.
             host = ProgressHostingView(rootView: PanelContent { [model, presentation] in
                 ProgressCard(model: model, presentation: presentation,

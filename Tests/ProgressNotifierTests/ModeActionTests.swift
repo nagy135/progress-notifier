@@ -8,11 +8,14 @@ final class ModeActionTests: XCTestCase {
         _ = NSApplication.shared
         let defaults = UserDefaults.standard
         let originalMode = defaults.object(forKey: "compactMode")
+        let originalTitles = defaults.object(forKey: "compactTitles")
         defer {
+            if let originalTitles { defaults.set(originalTitles, forKey: "compactTitles") }
+            else { defaults.removeObject(forKey: "compactTitles") }
             if let originalMode { defaults.set(originalMode, forKey: "compactMode") }
             else { defaults.removeObject(forKey: "compactMode") }
         }
-        for compact in [false, true] {
+        for (compact, titles) in [(false, false), (true, false), (true, true)] {
             let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
             defer { try? FileManager.default.removeItem(at: directory) }
             let registry = ProgressRegistry()
@@ -27,12 +30,37 @@ final class ModeActionTests: XCTestCase {
             try JSONEncoder().encode(registry.snapshot).write(to: stateURL)
             let model = ProgressModel(stateURL: stateURL)
             defaults.set(compact, forKey: "compactMode")
+            defaults.set(titles, forKey: "compactTitles")
             let delegate = AppDelegate(model: model)
             for action in ["recallCompleted", "toggleUpdates", "toggleAllUpdates", "undoClose", "undoDeletion"] {
                 _ = delegate.perform(NSSelectorFromString(action))
                 XCTAssertEqual(defaults.bool(forKey: "compactMode"), compact, "\(action) changed mode")
+                XCTAssertEqual(defaults.bool(forKey: "compactTitles"), titles, "\(action) changed title style")
             }
             XCTAssertEqual(Set(model.displayItems.map(\.name)), ["Completed", "Closed", "Deleted"])
         }
     }
+    func testShortcutsExpandTheirOwnStyleAndSwitchDirectlyToTheOtherStyle() {
+        _ = NSApplication.shared
+        let defaults = UserDefaults.standard
+        let keys = ["compactMode", "compactTitles"]
+        let originals = keys.map { defaults.object(forKey: $0) }
+        defer {
+            for (key, value) in zip(keys, originals) {
+                if let value { defaults.set(value, forKey: key) }
+                else { defaults.removeObject(forKey: key) }
+            }
+        }
+        for (compact, titles) in [(false, false), (false, true), (true, false), (true, true)] {
+            for requestedTitles in [false, true] {
+                defaults.set(compact, forKey: "compactMode")
+                defaults.set(titles, forKey: "compactTitles")
+                let delegate = AppDelegate()
+                delegate.toggleCompact(showTitles: requestedTitles)
+                XCTAssertEqual(defaults.bool(forKey: "compactMode"), !(compact && titles == requestedTitles))
+                XCTAssertEqual(defaults.bool(forKey: "compactTitles"), requestedTitles)
+            }
+        }
+    }
+
 }

@@ -227,6 +227,7 @@ private struct ItemCard: View {
     let panelFocused: Bool
     let updatesUnfolded: Bool
     let threadGroupSymbol: ThreadGroupSymbol?
+    var titlePresence: CGFloat = 0
     var receipt = false
     var grouped = false
     var detailWidth: CGFloat = ProgressCard.detailsWidth
@@ -360,6 +361,13 @@ private struct ItemCard: View {
                        alignment: .leading)
                 .opacity(detailOpacity).clipped()
                 .accessibilityHidden(receipt || expansion < 0.5)
+                Text(item.name)
+                    .font(.system(size: 10, weight: .medium))
+                    .lineLimit(1).truncationMode(.tail)
+                    .frame(width: 105 * titlePresence, alignment: .leading)
+                    .padding(.trailing, 7 * titlePresence)
+                    .opacity(Double(titlePresence)).clipped()
+                    .accessibilityHidden(titlePresence < 0.5)
                 ItemProgressBar(item: item, height: blend(5, 3, expansion))
                 // Reserve the same trailing space on every compact row so selecting
                 // a task never shifts its bar. Inset the dot from the selection
@@ -540,7 +548,7 @@ struct ProgressCard: View {
                         VStack(alignment: .leading, spacing: 0) {
                             ForEach(Array(presentation.rows.enumerated()), id: \.element.id) { index, row in
                                 timelineRow(row, now: context.date)
-                                    .frame(width: blend(144, Self.expandedRowWidth, expansion), alignment: .leading)
+                                    .frame(width: blend(presentation.compactRowWidth, Self.expandedRowWidth, expansion), alignment: .leading)
                                     .fixedSize(horizontal: false, vertical: true)
                                     .frame(height: presentation.rowHeight(row) * row.presence,
                                            alignment: .top)
@@ -686,7 +694,7 @@ struct ProgressCard: View {
                      historyHeight: row.historyHeight,
                      selected: presentation.focusedItemID == row.id, panelFocused: model.isFocused,
                      updatesUnfolded: presentation.showsUpdates(for: row.id),
-                     threadGroupSymbol: row.threadGroupSymbol, receipt: row.receipt,
+                     threadGroupSymbol: row.threadGroupSymbol, titlePresence: presentation.titlePresence, receipt: row.receipt,
                      grouped: row.timeline != nil, detailWidth: width - 16,
                      parentLabel: row.timeline?.detached == true ? row.timeline?.parentLabel : nil)
                 .padding(.leading, inset)

@@ -40,7 +40,7 @@ final class ModeActionTests: XCTestCase {
             XCTAssertEqual(Set(model.displayItems.map(\.name)), ["Completed", "Closed", "Deleted"])
         }
     }
-    func testShortcutsExpandTheirOwnStyleAndSwitchDirectlyToTheOtherStyle() {
+    func testTitleShortcutTogglesMinimizedStylesAndPlainShortcutKeepsItsBehavior() {
         _ = NSApplication.shared
         let defaults = UserDefaults.standard
         let keys = ["compactMode", "compactTitles"]
@@ -51,15 +51,24 @@ final class ModeActionTests: XCTestCase {
                 else { defaults.removeObject(forKey: key) }
             }
         }
-        for (compact, titles) in [(false, false), (false, true), (true, false), (true, true)] {
-            for requestedTitles in [false, true] {
-                defaults.set(compact, forKey: "compactMode")
-                defaults.set(titles, forKey: "compactTitles")
-                let delegate = AppDelegate()
-                delegate.toggleCompact(showTitles: requestedTitles)
-                XCTAssertEqual(defaults.bool(forKey: "compactMode"), !(compact && titles == requestedTitles))
-                XCTAssertEqual(defaults.bool(forKey: "compactTitles"), requestedTitles)
-            }
+        // Starting mode, shortcut, expected mode. Shift+M must never expand the panel.
+        let transitions: [(Bool, Bool, Bool, Bool, Bool)] = [
+            (false, false, false, true, false),
+            (false, true, false, true, false),
+            (true, false, false, false, false),
+            (true, true, false, true, false),
+            (false, false, true, true, true),
+            (false, true, true, true, true),
+            (true, false, true, true, true),
+            (true, true, true, true, false),
+        ]
+        for (compact, titles, requestedTitles, expectedCompact, expectedTitles) in transitions {
+            defaults.set(compact, forKey: "compactMode")
+            defaults.set(titles, forKey: "compactTitles")
+            let delegate = AppDelegate()
+            delegate.toggleCompact(showTitles: requestedTitles)
+            XCTAssertEqual(defaults.bool(forKey: "compactMode"), expectedCompact)
+            XCTAssertEqual(defaults.bool(forKey: "compactTitles"), expectedTitles)
         }
     }
 

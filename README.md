@@ -235,9 +235,10 @@ The smoke test sends real progress cards and plays one completion sound. It clea
 ### Minimized title mode
 
 Press **m** to toggle between expanded and the original title-free minimized mode.
-Press **Shift+M** to toggle between expanded and minimized with titles: a 280-point-wide
-panel with a truncated task title beside each progress bar and the same 20-point row height.
-Using the other shortcut while minimized switches directly to its style. The mode is
+Press **Shift+M** to toggle between plain minimized and minimized with titles: a
+280-point-wide panel with a truncated task title beside each progress bar and the same
+20-point row height. From expanded mode, Shift+M enters minimized with titles; pressing
+it again returns to plain minimized. Pressing m in title mode switches to plain minimized. The mode is
 saved across relaunches. History, selection, and
 detail shortcuts preserve either minimized style. Clicking the top toggles the original
 minimized mode.

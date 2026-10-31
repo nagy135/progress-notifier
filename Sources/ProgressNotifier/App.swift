@@ -170,10 +170,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     func toggleCompact(showTitles: Bool = false) {
-        // Each shortcut expands its own compact style, or switches directly to that style.
+        // Shift+M stays minimized while toggling titles; m keeps its original behavior.
         panel?.makeKeyAndOrderFront(nil)
-        compact = !(compact && compactTitles == showTitles)
-        compactTitles = showTitles
+        if showTitles {
+            compactTitles = !(compact && compactTitles)
+            compact = true
+        } else {
+            compact = !(compact && !compactTitles)
+            compactTitles = false
+        }
         UserDefaults.standard.set(compact, forKey: "compactMode")
         UserDefaults.standard.set(compactTitles, forKey: "compactTitles")
         refreshPanel()

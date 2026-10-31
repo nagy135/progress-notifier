@@ -43,7 +43,7 @@ final class PanelPlacementTests: XCTestCase {
 
     func testMovingBetweenDifferentSizeMonitorsFitsStackAndKeepsCorner() throws {
         let registry = ProgressRegistry()
-        for index in 0..<7 {
+        for index in 0..<8 {
             try registry.update(.init(name: "Task \(index)", progress: 50, etaSeconds: 60))
         }
         let presentation = ProgressPresentation(compact: false)

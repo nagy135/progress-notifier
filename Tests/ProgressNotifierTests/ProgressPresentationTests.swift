@@ -39,7 +39,7 @@ final class ProgressPresentationTests: XCTestCase {
         let heights = settle(presentation) {
             presentation.measure([first.id: 50, second.id: 68], animated: true)
         }
-        XCTAssertEqual(presentation.windowHeight, 80 + 92 + 110 + 6 + 8)
+        XCTAssertEqual(presentation.windowHeight, 68 + 80 + 98 + 4 + 8)
         XCTAssertTrue(zip(heights, heights.dropFirst()).allSatisfy { $0 <= $1 })
         XCTAssertFalse(presentation.needsScrolling)
     }
@@ -49,9 +49,9 @@ final class ProgressPresentationTests: XCTestCase {
         let recalled = try item("Recalled")
         let start = presentation.windowHeight
         presentation.update(items: [recalled], compact: false, animated: true)
-        // A 50-point detail block makes the card exactly as tall as the empty state.
+        // A 62-point detail block makes the card exactly as tall as the empty state.
         let heights = settle(presentation) {
-            presentation.measure([recalled.id: 50], animated: true)
+            presentation.measure([recalled.id: 62], animated: true)
         }
         XCTAssertEqual(presentation.windowHeight, start)
         XCTAssertTrue(heights.allSatisfy { abs($0 - start) < 0.001 },
@@ -71,7 +71,7 @@ final class ProgressPresentationTests: XCTestCase {
         }
         if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion { XCTAssertTrue(keptDepartingRows) }
         XCTAssertTrue(zip(heights, heights.dropFirst()).allSatisfy { $0 >= $1 })
-        XCTAssertEqual(presentation.windowHeight, 180)
+        XCTAssertEqual(presentation.windowHeight, 168)
         XCTAssertTrue(presentation.rows.isEmpty)
         XCTAssertEqual(presentation.emptyPresence, 1)
     }
@@ -118,7 +118,7 @@ final class ProgressPresentationTests: XCTestCase {
             try registry.update(.init(name: name, progress: 75, etaSeconds: 20, description: "Tested"))
         }
         let presentation = ProgressPresentation(compact: false)
-        presentation.maximumHeight = 450
+        presentation.maximumHeight = 400
         presentation.update(items: registry.items, compact: false, animated: false)
         let heights = Dictionary(uniqueKeysWithValues: registry.items.map { ($0.id, CGFloat(90)) })
         presentation.measure(heights, animated: false)
@@ -129,7 +129,7 @@ final class ProgressPresentationTests: XCTestCase {
         XCTAssertEqual(presentation.rows.map(\.historyHeight), [90, 0])
         XCTAssertTrue(zip(frames, frames.dropFirst()).allSatisfy { $0 <= $1 })
         XCTAssertTrue(presentation.needsScrolling)
-        XCTAssertEqual(presentation.windowHeight, 450)
+        XCTAssertEqual(presentation.windowHeight, 400)
         _ = settle(presentation) { presentation.setShowsUpdates(false, animated: true) }
         XCTAssertEqual(presentation.windowHeight, folded)
         XCTAssertFalse(presentation.needsScrolling)

@@ -271,8 +271,16 @@ private struct ItemCard: View {
                 .font(.system(size: latest == nil ? 11 : 10)).foregroundStyle(.secondary).monospacedDigit()
                 .padding(.leading, item.project == nil && latest == nil ? iconWidth : 0)
             if let latest {
-                SnapshotRow(entry: latest, now: now, latest: true, showMeter: !noteMatchesProgress)
-                    .padding(.top, 8)
+                HStack(alignment: .top, spacing: 6) {
+                    Text(latest.description).font(.system(size: 12))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Text(updateAge(latest.recordedAt, now: now))
+                        .font(.system(size: 9)).monospacedDigit().foregroundStyle(palette.accent)
+                        .padding(.top, 2)
+                        .accessibilityLabel(latest.recordedAt.formatted(date: .abbreviated, time: .standard))
+                }
+                .padding(.top, 4)
                 if !noteMatchesProgress {
                     Text("Current progress · last note at \(latest.progress, specifier: "%.0f")%")
                         .font(.system(size: 9)).foregroundStyle(.secondary).padding(.top, 5)
@@ -311,7 +319,7 @@ private struct ItemCard: View {
     private var earlierUpdates: some View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(item.updates.dropFirst()) { entry in
-                Divider().padding(.vertical, 10)
+                Divider().padding(.vertical, 6)
                 SnapshotRow(entry: entry, now: now)
             }
         }
@@ -329,10 +337,10 @@ private struct ItemCard: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .opacity(detailOpacity).clipped()
                 .accessibilityHidden(expansion < 0.5)
-                .padding(.bottom, (receipt ? 2 : 8) * expansion)
+                .padding(.bottom, (receipt ? 2 : 4) * expansion)
             HStack(spacing: 0) {
                 Color.clear
-                    .frame(width: blend(iconWidth, latest == nil ? 0 : 38, expansion), height: 16)
+                    .frame(width: blend(iconWidth, earlierUpdateCount > 0 ? 28 : 0, expansion), height: 16)
                     .overlay(alignment: .leading) {
                         if earlierUpdateCount > 0 && !receipt {
                             HStack(spacing: 3) {
@@ -365,7 +373,7 @@ private struct ItemCard: View {
                     .opacity(receipt ? 0 : detailOpacity).clipped()
                     .accessibilityHidden(expansion < 0.5)
             }
-            .frame(height: blend(ProgressCard.compactRowHeight, receipt ? 4 : 16, expansion))
+            .frame(height: blend(ProgressCard.compactRowHeight, receipt ? 4 : 14, expansion))
             earlierUpdates
                 .frame(width: 0, height: historyHeight * expansion, alignment: .topLeading)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -374,8 +382,8 @@ private struct ItemCard: View {
                 .accessibilityHidden(historyHeight < 0.5 || expansion < 0.5)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 12 * expansion)
-        .padding(.vertical, (receipt ? 6 : 9) * expansion)
+        .padding(.horizontal, 10 * expansion)
+        .padding(.vertical, 6 * expansion)
         .overlay(alignment: .topLeading) {
             HStack(spacing: 4) {
                 if receipt {
@@ -399,8 +407,8 @@ private struct ItemCard: View {
                         .accessibilityLabel(threadGroupSymbol.accessibilityLabel)
                 }
             }
-                .padding(.leading, 12 * expansion)
-                .padding(.top, blend((ProgressCard.compactRowHeight - 16) / 2, (receipt ? 6 : 9) + completionHeaderHeight, expansion))
+                .padding(.leading, 10 * expansion)
+                .padding(.top, blend((ProgressCard.compactRowHeight - 16) / 2, 6 + completionHeaderHeight, expansion))
                 .allowsHitTesting(false)
         }
         .overlay(alignment: .topTrailing) {
@@ -411,7 +419,7 @@ private struct ItemCard: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Close \(item.name)")
             .modifier(ExcludeFromCardClicks(enabled: expansion > 0.95))
-            .padding(.trailing, 12 * expansion).padding(.top, (receipt ? 2 : 9) * expansion)
+            .padding(.trailing, 8 * expansion).padding(.top, (receipt ? 2 : 3) * expansion)
             .opacity(detailOpacity).allowsHitTesting(expansion > 0.95)
             .accessibilityHidden(expansion < 0.5)
         }
@@ -452,7 +460,7 @@ private struct TimelineRail: View {
         Canvas { context, _ in
             let mainX: CGFloat = 5
             let nodeY: CGFloat = 10 + 4 * expansion
-            let bottom = rowHeight + (endsGroup ? 0 : 2 + 4 * expansion)
+            let bottom = rowHeight + (endsGroup ? 0 : 2 + 2 * expansion)
             var rail = Path()
             rail.move(to: CGPoint(x: mainX, y: 0))
             rail.addLine(to: CGPoint(x: mainX, y: endsGroup ? nodeY : bottom))
@@ -477,7 +485,7 @@ private struct TimelineRail: View {
                 context.stroke(arrow, with: .color(.mint), lineWidth: 1)
             }
         }
-        .frame(width: 44, height: max(0, rowHeight + (endsGroup ? 0 : 2 + 4 * expansion)), alignment: .topLeading)
+        .frame(width: 44, height: max(0, rowHeight + (endsGroup ? 0 : 2 + 2 * expansion)), alignment: .topLeading)
     }
 }
 
@@ -487,7 +495,7 @@ struct ProgressCard: View {
     // Reserve the native legacy scroller gutter even before overflow, so descriptions
     // never rewrap and historical percentages never clip when macOS shows the scroller.
     static let expandedRowWidth: CGFloat = 314 - NSScroller.scrollerWidth(for: .regular, scrollerStyle: .legacy)
-    static let detailsWidth: CGFloat = expandedRowWidth - 24
+    static let detailsWidth: CGFloat = expandedRowWidth - 20
 
     @ObservedObject var model: ProgressModel
     @ObservedObject var presentation: ProgressPresentation
@@ -507,7 +515,7 @@ struct ProgressCard: View {
     private var runningCount: Int { model.displayItems.filter { !$0.completing }.count }
 
     static func horizontalInset(expansion: CGFloat) -> CGFloat { blend(12, 14, expansion) }
-    static func verticalInset(expansion: CGFloat) -> CGFloat { blend(8, 14, expansion) }
+    static func verticalInset(expansion: CGFloat) -> CGFloat { blend(8, 10, expansion) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -522,7 +530,7 @@ struct ProgressCard: View {
             .padding(.trailing, 32)
             .frame(height: 24 * expansion, alignment: .top)
             .opacity(Double(expansion)).clipped()
-            .padding(.bottom, 8 * expansion)
+            .padding(.bottom, 4 * expansion)
             .accessibilityHidden(expansion < 0.5)
 
             ScrollViewReader { proxy in
@@ -596,7 +604,7 @@ struct ProgressCard: View {
                 Text("↑↓  J/K").font(.system(size: 9))
             }
             .font(.system(size: 11)).foregroundStyle(.secondary)
-            .frame(height: 30 * expansion * presentation.updatesControlPresence, alignment: .bottom)
+            .frame(height: 24 * expansion * presentation.updatesControlPresence, alignment: .bottom)
             .opacity(Double(expansion * presentation.updatesControlPresence)).clipped()
             .allowsHitTesting(expansion > 0.95 && presentation.updatesControlPresence > 0.95)
             .accessibilityHidden(expansion < 0.5 || presentation.updatesControlPresence < 0.5)
@@ -678,7 +686,8 @@ struct ProgressCard: View {
                      selected: presentation.focusedItemID == row.id, panelFocused: model.isFocused,
                      updatesUnfolded: presentation.showsUpdates(for: row.id),
                      threadGroupSymbol: row.threadGroupSymbol, receipt: row.receipt,
-                     grouped: row.timeline != nil, detailWidth: width - 24, parentLabel: row.timeline?.parentLabel)
+                     grouped: row.timeline != nil, detailWidth: width - 20,
+                     parentLabel: row.timeline?.detached == true ? row.timeline?.parentLabel : nil)
                 .padding(.leading, inset)
                 .overlay(alignment: .topLeading) {
                     if let entry = row.timeline {

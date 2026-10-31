@@ -49,7 +49,7 @@ final class PanelPlacementTests: XCTestCase {
         let presentation = ProgressPresentation(compact: false)
         presentation.update(items: registry.items, compact: false, animated: false)
         // Keep this fixture between the two smaller screen limits as card chrome changes.
-        presentation.measure(Dictionary(uniqueKeysWithValues: registry.items.map { ($0.id, CGFloat(70)) }), animated: false)
+        presentation.measure(Dictionary(uniqueKeysWithValues: registry.items.map { ($0.id, CGFloat(80)) }), animated: false)
         let large = CGRect(x: 0, y: 0, width: 1920, height: 1200)
         let small = CGRect(x: 193, y: -982, width: 1512, height: 950)
 

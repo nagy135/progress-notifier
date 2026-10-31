@@ -23,6 +23,7 @@ private enum LucideCatalog {
 struct ProjectIconView: View {
     let project: String
     let icon: ProjectIcon?
+    var size: CGFloat = 16
     @Environment(\.colorScheme) private var colorScheme
 
     private var resolved: ProjectIcon { icon ?? .defaultIcon(for: project) }
@@ -44,7 +45,7 @@ struct ProjectIconView: View {
         Group {
             switch resolved.kind {
             case .emoji:
-                Text(resolved.emoji ?? "").font(.system(size: 13))
+                Text(resolved.emoji ?? "").font(.system(size: size * 13 / 16))
             case .lucide:
                 if let image = LucideCatalog.image(named: resolved.name ?? "") {
                     Image(nsImage: image).resizable().scaledToFit().padding(1).foregroundStyle(tint)
@@ -55,15 +56,15 @@ struct ProjectIconView: View {
                 monogram(resolved)
             }
         }
-        .frame(width: 16, height: 16)
+        .frame(width: size, height: size)
         .accessibilityHidden(true)
     }
 
     private func monogram(_ icon: ProjectIcon) -> some View {
         Text(icon.text ?? "PR")
-            .font(.system(size: 8.25, weight: .bold, design: .monospaced))
+            .font(.system(size: size * 8.25 / 16, weight: .bold, design: .monospaced))
             .foregroundStyle(tint)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 4))
+            .background(tint.opacity(0.14), in: RoundedRectangle(cornerRadius: size / 4))
     }
 }

@@ -50,7 +50,7 @@ final class ProgressPresentation: ObservableObject {
     // The empty compact card only needs room for its status icon and close button.
     var cardWidth: CGFloat { 200 + 150 * expansion - 128 * emptyPresence * (1 - expansion) }
     var windowWidth: CGFloat { cardWidth + 20 }
-    var chromeHeight: CGFloat { 36 + 24 * expansion + 20 * expansion * updatesControlPresence }
+    var chromeHeight: CGFloat { 36 + 18 * expansion + 16 * expansion * updatesControlPresence }
     var naturalContentHeight: CGFloat {
         let rowHeight = rows.reduce(CGFloat.zero) { total, row in
             total + row.presence * rowHeight(row)
@@ -61,8 +61,8 @@ final class ProgressPresentation: ObservableObject {
     }
     func spacing(before index: Int) -> CGFloat {
         guard index > 0 else { return 0 }
-        let boundary: CGFloat = rows[index].timeline?.startsGroup == true ? 10 - 4 * expansion : 0
-        return (2 + 2 * expansion + boundary) * min(rows[index].presence, rows[index - 1].presence)
+        let boundary: CGFloat = rows[index].timeline?.startsGroup == true ? 10 - 5 * expansion : 0
+        return (2 + expansion + boundary) * min(rows[index].presence, rows[index - 1].presence)
     }
 
     var contentHeight: CGFloat { min(naturalContentHeight, max(0, maximumHeight - chromeHeight)) }
@@ -185,16 +185,16 @@ final class ProgressPresentation: ObservableObject {
     }
 
     func rowHeight(_ row: Row) -> CGFloat {
-        headerHeight(row) + 20 + (row.detailsHeight + (row.receipt ? -2 : 8) + row.historyHeight) * expansion
+        headerHeight(row) + 20 + (row.detailsHeight + (row.receipt ? -2 : 0) + row.historyHeight) * expansion
     }
 
     func headerHeight(_ row: Row) -> CGFloat {
-        row.timeline?.startsGroup == true ? 20 * expansion : 0
+        row.timeline?.startsGroup == true ? 16 * expansion : 0
     }
 
     static func timelineInset(_ row: Row) -> CGFloat {
         guard let entry = row.timeline else { return 0 }
-        return 16 + CGFloat(min(entry.depth, 2)) * 12
+        return 12 + CGFloat(min(entry.depth, 2)) * 10
     }
 
     private func animate(animated: Bool) {

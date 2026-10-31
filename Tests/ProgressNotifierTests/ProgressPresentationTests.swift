@@ -39,7 +39,7 @@ final class ProgressPresentationTests: XCTestCase {
         let heights = settle(presentation) {
             presentation.measure([first.id: 50, second.id: 68], animated: true)
         }
-        XCTAssertEqual(presentation.windowHeight, 68 + 80 + 98 + 4 + 8)
+        XCTAssertEqual(presentation.windowHeight, 60 + 78 + 96 + 4 + 8)
         XCTAssertTrue(zip(heights, heights.dropFirst()).allSatisfy { $0 <= $1 })
         XCTAssertFalse(presentation.needsScrolling)
     }
@@ -49,9 +49,9 @@ final class ProgressPresentationTests: XCTestCase {
         let recalled = try item("Recalled")
         let start = presentation.windowHeight
         presentation.update(items: [recalled], compact: false, animated: true)
-        // A 62-point detail block makes the card exactly as tall as the empty state.
+        // A 64-point detail block makes the card exactly as tall as the empty state.
         let heights = settle(presentation) {
-            presentation.measure([recalled.id: 62], animated: true)
+            presentation.measure([recalled.id: 64], animated: true)
         }
         XCTAssertEqual(presentation.windowHeight, start)
         XCTAssertTrue(heights.allSatisfy { abs($0 - start) < 0.001 },
@@ -71,7 +71,7 @@ final class ProgressPresentationTests: XCTestCase {
         }
         if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion { XCTAssertTrue(keptDepartingRows) }
         XCTAssertTrue(zip(heights, heights.dropFirst()).allSatisfy { $0 >= $1 })
-        XCTAssertEqual(presentation.windowHeight, 168)
+        XCTAssertEqual(presentation.windowHeight, 160)
         XCTAssertTrue(presentation.rows.isEmpty)
         XCTAssertEqual(presentation.emptyPresence, 1)
     }

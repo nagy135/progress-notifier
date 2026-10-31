@@ -646,7 +646,12 @@ struct ProgressCard: View {
         }
         .contentShape(Rectangle())
         .simultaneousGesture(SpatialTapGesture().onEnded { value in
-            if !(buttonFrames + itemFrames).contains(where: { $0.contains(value.location) }) { toggleCompact() }
+            // Only the top chrome changes mode; blank space beside/below tasks does not.
+            let topHeight = 10 + Self.verticalInset(expansion: expansion) + 32 * expansion
+            if value.location.y < topHeight,
+               !(buttonFrames + itemFrames).contains(where: { $0.contains(value.location) }) {
+                toggleCompact()
+            }
         })
     }
 

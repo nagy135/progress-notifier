@@ -18,7 +18,7 @@ final class ProgressPanel: NSPanel {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
-    private let model = ProgressModel()
+    private let model: ProgressModel
     private let server = HTTPServer()
     private var panel: ProgressPanel?
     private var statusItem: NSStatusItem?
@@ -29,6 +29,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var compact = UserDefaults.standard.bool(forKey: "compactMode")
     private var placement = PanelPlacement(rawValue: UserDefaults.standard.string(forKey: "panelPlacement") ?? "") ?? .topRight
     private let presentation = ProgressPresentation(compact: UserDefaults.standard.bool(forKey: "compactMode"))
+
+    init(model: ProgressModel = ProgressModel()) {
+        self.model = model
+        super.init()
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let appMenu = NSMenu()
@@ -93,7 +98,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             case "j": self.presentation.moveFocus(by: 1, animated: true); return nil
             case "k": self.presentation.moveFocus(by: -1, animated: true); return nil
             case "q": self.hideProgress(); return nil
-            case "m": self.toggleCompact(); return nil
+            case "m":
+                if !event.isARepeat { self.toggleCompact() }
+                return nil
             case ".":
                 if !event.isARepeat { self.togglePlacement() }
                 return nil
@@ -232,16 +239,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     @objc private func toggleUpdates() {
-        let wasCompact = compact
-        if compact { setCompact(false) }
         guard presentation.focusedItemID != nil else { return }
-        // D from compact opens the remembered ledger; further presses fold its history.
-        presentation.setShowsUpdates(wasCompact || !presentation.showsUpdates, animated: panel?.isVisible == true)
+        presentation.setShowsUpdates(!presentation.showsUpdates, animated: panel?.isVisible == true)
         refreshPanel()
     }
 
     @objc private func toggleAllUpdates() {
-        if compact { setCompact(false) }
         guard presentation.focusedItemID != nil else { return }
         presentation.toggleAllUpdates(animated: panel?.isVisible == true)
         refreshPanel()
@@ -249,7 +252,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     @objc private func recallCompleted() {
         guard model.recallCompleted() else { return }
-        setCompact(false)
         showProgress()
     }
 
@@ -266,7 +268,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     @objc private func undoClose() {
         guard let item = model.undoClose() else { return }
-        setCompact(false)
         showProgress()
         presentation.focus(item.id, animated: true)
     }
@@ -278,7 +279,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     @objc private func undoDeletion() {
         guard let item = model.undoDeletion() else { return }
-        setCompact(false)
         showProgress()
         presentation.focus(item.id, animated: true)
     }

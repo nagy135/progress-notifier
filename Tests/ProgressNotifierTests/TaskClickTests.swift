@@ -33,7 +33,7 @@ final class TaskClickTests: XCTestCase {
         }
     }
 
-    func testCloseButtonDoesNotSelectOpenOrToggleModeAndBackgroundStillToggles() throws {
+    func testCloseButtonDoesNotSelectOpenOrToggleModeAndOnlyTopBackgroundToggles() throws {
         let fixture = try Fixture(compact: false)
         defer { fixture.close() }
         fixture.click(row: 1, closeButton: true)
@@ -41,7 +41,20 @@ final class TaskClickTests: XCTestCase {
         XCTAssertEqual(fixture.presentation.focusedItemID, fixture.items[0].id)
         XCTAssertTrue(fixture.opened.isEmpty)
         XCTAssertEqual(fixture.modeToggles, 0)
+        fixture.click(at: CGPoint(x: 15, y: 100))
+        fixture.click(at: CGPoint(x: 70, y: fixture.presentation.windowHeight - 15))
+        XCTAssertEqual(fixture.modeToggles, 0)
         fixture.click(at: CGPoint(x: 70, y: 30))
+        XCTAssertEqual(fixture.modeToggles, 1)
+    }
+
+    func testCompactTopMarginTogglesButSideAndBottomMarginsDoNot() throws {
+        let fixture = try Fixture(compact: true)
+        defer { fixture.close() }
+        fixture.click(at: CGPoint(x: 15, y: 45))
+        fixture.click(at: CGPoint(x: 70, y: fixture.presentation.windowHeight - 15))
+        XCTAssertEqual(fixture.modeToggles, 0)
+        fixture.click(at: CGPoint(x: 70, y: 14))
         XCTAssertEqual(fixture.modeToggles, 1)
     }
 

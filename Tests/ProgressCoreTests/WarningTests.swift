@@ -2,6 +2,36 @@ import XCTest
 @testable import ProgressCore
 
 final class WarningTests: XCTestCase {
+    func testAcknowledgementClearsOnlySelectedWarningWithoutChangingTimingOrReplayingCompletion() throws {
+        let registry = ProgressRegistry()
+        let now = Date(timeIntervalSince1970: 1000)
+        for name in ["First", "Second"] {
+            try registry.update(.init(name: name, progress: 42, etaSeconds: 90, warning: "Question?"), now: now)
+        }
+        let first = registry.items[0]
+        XCTAssertTrue(registry.acknowledgeWarning(id: first.id, now: now.addingTimeInterval(5)))
+        XCTAssertNil(registry.items[0].warning)
+        XCTAssertEqual(registry.items[0].expectedFinish, first.expectedFinish)
+        XCTAssertEqual(registry.items[0].progress, first.progress)
+        XCTAssertFalse(registry.items[0].completing)
+        XCTAssertEqual(registry.items[1].warning, "Question?")
+        XCTAssertEqual(registry.items[0].updates.first?.description, "Warning acknowledged")
+        XCTAssertEqual(registry.items[0].updates.last?.warning, "Question?")
+        XCTAssertFalse(registry.acknowledgeWarning(id: first.id))
+        XCTAssertEqual(registry.items[0].updates.count, 2)
+        // Ordinary agent updates cannot silently reintroduce the acknowledged warning.
+        try registry.update(.init(name: "First", progress: 60, etaSeconds: 20))
+        XCTAssertNil(registry.items[0].warning)
+        try registry.update(.init(name: "First", progress: 100, etaSeconds: 0, warning: "New issue"))
+        XCTAssertTrue(registry.acknowledgeWarning(id: first.id))
+        XCTAssertNil(registry.items[0].warning)
+        XCTAssertNil(registry.history[0].warning)
+        XCTAssertEqual(registry.items[0].updates.map(\.id), registry.history[0].updates.map(\.id))
+        registry.clearCompleted()
+        XCTAssertTrue(registry.revealNextCompleted())
+        XCTAssertNil(registry.revealedHistory[0].warning)
+    }
+
     func testWarningIsTaskScopedStickyAndExplicitlyClearedWithHistory() throws {
         let registry = ProgressRegistry()
         let now = Date(timeIntervalSince1970: 1000)

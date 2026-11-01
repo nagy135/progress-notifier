@@ -1,8 +1,34 @@
 import XCTest
+import AppKit
 import ProgressCore
 @testable import ProgressNotifier
 
 final class WarningAPITests: XCTestCase {
+    func testAcknowledgementPersistsWithoutCompletionFeedbackInEveryMode() throws {
+        for (compact, titles) in [(false, false), (true, false), (true, true)] {
+            let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let registry = ProgressRegistry()
+            try registry.update(.init(name: "Warning", progress: 42, etaSeconds: 90, warning: "Question?"))
+            let stateURL = directory.appendingPathComponent("state.json")
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try JSONEncoder().encode(registry.snapshot).write(to: stateURL)
+            var sounds = 0
+            let model = ProgressModel(stateURL: stateURL, completionFeedback: { sounds += 1 })
+            let presentation = ProgressPresentation(compact: compact, showTitles: titles)
+            presentation.update(items: model.displayItems, compact: compact, animated: false, showTitles: titles)
+            let selected = try XCTUnwrap(presentation.focusedItem)
+            model.acknowledgeWarning(selected)
+            let restored = ProgressModel(stateURL: stateURL)
+            XCTAssertNil(restored.items[0].warning)
+            XCTAssertEqual(restored.items[0].expectedFinish, selected.expectedFinish)
+            XCTAssertEqual(restored.items[0].progress, 42)
+            XCTAssertEqual(restored.items[0].updates.first?.description, "Warning acknowledged")
+            XCTAssertEqual(restored.items[0].updates.last?.warning, "Question?")
+            XCTAssertEqual(sounds, 0)
+        }
+    }
+
     func testWarningRoundTripValidationAndClearAreIndependentOfDescriptions() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }

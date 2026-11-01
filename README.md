@@ -228,7 +228,10 @@ Add `--warning 'Upload rate-limited; retrying in 30s'` to a normal progress upda
 The affected task shows a static amber striped bar in all three modes, including
 minimized mode, and its message in expanded view and the bar tooltip. Progress and
 ETA continue normally. Omitted warnings are preserved; `--clear-warning` explicitly
-clears one. Warnings and their ledger snapshots survive relaunch and history recall.
+clears one. Enter acknowledges and clears the selected warning while opening its
+linked chat as usual (also applies to double-click and the Open Focused Task menu
+action). This preserves progress and ETA and records “Warning acknowledged”; it
+is not an answer or approval. Warnings and their ledger snapshots survive relaunch and history recall.
 Completion preserves unresolved warnings; a new run starts without one.
 
 Warnings may include a user question, but supplement the normal question in chat

@@ -64,6 +64,10 @@ final class ProgressModel: ObservableObject {
         return true
     }
 
+    func acknowledgeWarning(_ item: ProgressItem) {
+        if registry.acknowledgeWarning(id: item.id) { publish() }
+    }
+
     func clearCompleted() { registry.clearCompleted(); publish() }
 
     func handle(_ request: HTTPRequest) -> HTTPResponse {

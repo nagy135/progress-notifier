@@ -243,7 +243,14 @@ progress-notify 'Build release' 70 60 --clear-warning \
 
 Omitting both warning flags **preserves** the existing warning, including at 100%.
 Use `--clear-warning` only once the issue or question is resolved; ordinary progress
-must not silently clear it. An unresolved warning can remain on a completed result.
+must not silently clear it. The user can acknowledge and remove the selected task's
+warning with **Enter** (including keypad Enter) in every display mode. Enter still
+opens the linked chat as usual; double-clicking or using the Open Focused Task menu
+action also acknowledges it. Acknowledgement adds a “Warning acknowledged” ledger
+entry, preserves progress and ETA, and persists across relaunch and history recall.
+It only clears the displayed warning: it is not an answer, approval, or permission.
+Do not infer a response from acknowledgement. An explicit later `--warning` can
+raise a new warning. An unresolved warning can remain on a completed result.
 A new run starts without a warning. Never create a separate warning task or use a
 warning to signal completion or failure. Warnings use the existing brief update
 flash, with no repeating animation or additional sound.

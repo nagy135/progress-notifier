@@ -263,7 +263,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     @objc private func clearCompleted() { model.clearCompleted() }
 
     @objc private func openFocusedThread() {
-        T3ThreadOpener().open(presentation.focusedItem?.openingThread)
+        guard let item = presentation.focusedItem else { return }
+        model.acknowledgeWarning(item)
+        T3ThreadOpener().open(item.openingThread)
     }
 
     @objc private func closeFocusedTask() {

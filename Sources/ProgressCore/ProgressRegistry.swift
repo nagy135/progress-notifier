@@ -391,6 +391,18 @@ public final class ProgressRegistry {
         item.updates = Array(item.updates.prefix(updateLimit))
     }
 
+    /// Acknowledge by identity without changing progress, ETA, visibility or completion.
+    @discardableResult
+    public func acknowledgeWarning(id: UUID, now: Date = Date()) -> Bool {
+        guard var item = items.first(where: { $0.id == id }) ?? history.first(where: { $0.id == id }),
+              item.warning != nil else { return false }
+        item.warning = nil
+        Self.record("Warning acknowledged", progress: item.progress, on: &item, now: now)
+        if let index = items.firstIndex(where: { $0.id == id }) { items[index] = item }
+        if let index = history.firstIndex(where: { $0.id == id }) { history[index] = item }
+        return true
+    }
+
     public func dismiss(name: String) {
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         if let item = items.first(where: { $0.name == name }) {

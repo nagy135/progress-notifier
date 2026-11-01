@@ -40,7 +40,7 @@ final class ModeActionTests: XCTestCase {
             XCTAssertEqual(Set(model.displayItems.map(\.name)), ["Completed", "Closed", "Deleted"])
         }
     }
-    func testTitleShortcutTogglesMinimizedStylesAndPlainShortcutKeepsItsBehavior() {
+    func testTitleShortcutTogglesStylesAndPlainShortcutExpandsEitherStyle() {
         _ = NSApplication.shared
         let defaults = UserDefaults.standard
         let keys = ["compactMode", "compactTitles"]
@@ -56,7 +56,7 @@ final class ModeActionTests: XCTestCase {
             (false, false, false, true, false),
             (false, true, false, true, false),
             (true, false, false, false, false),
-            (true, true, false, true, false),
+            (true, true, false, false, false),
             (false, false, true, true, true),
             (false, true, true, true, true),
             (true, false, true, true, true),

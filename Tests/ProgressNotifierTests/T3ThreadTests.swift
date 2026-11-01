@@ -9,7 +9,8 @@ final class T3ThreadTests: XCTestCase {
         let first = T3ThreadReference(environmentId: "mac", threadId: "first")
         let second = T3ThreadReference(environmentId: "remote", threadId: "second")
         for (name, reference) in [("First", first), ("Second", second), ("Unlinked", nil)] {
-            try registry.update(.init(name: name, progress: 10, etaSeconds: 60, t3Thread: reference))
+            try registry.update(.init(name: name, progress: 10, etaSeconds: 60, t3Thread: reference,
+                                      t3OpenThread: name == "Second" ? .init(environmentId: "mac", threadId: "child") : nil))
         }
         for compact in [false, true] {
             let presentation = ProgressPresentation(compact: compact)
@@ -20,14 +21,14 @@ final class T3ThreadTests: XCTestCase {
                 XCTAssertTrue(configuration.activates)
                 opened += urls
             }
-            XCTAssertTrue(opener.open(presentation.focusedItem?.t3Thread))
+            XCTAssertTrue(opener.open(presentation.focusedItem?.openingThread))
             presentation.moveFocus(by: 1, animated: false)
-            XCTAssertTrue(opener.open(presentation.focusedItem?.t3Thread))
-            XCTAssertEqual(opened, [try XCTUnwrap(first.url), try XCTUnwrap(second.url)])
+            XCTAssertTrue(opener.open(presentation.focusedItem?.openingThread))
+            XCTAssertEqual(opened, [try XCTUnwrap(first.url), try XCTUnwrap(T3ThreadReference(environmentId: "mac", threadId: "child").url)])
             presentation.moveFocus(by: 1, animated: false)
-            XCTAssertFalse(opener.open(presentation.focusedItem?.t3Thread))
+            XCTAssertFalse(opener.open(presentation.focusedItem?.openingThread))
             presentation.update(items: [], compact: compact, animated: false)
-            XCTAssertFalse(opener.open(presentation.focusedItem?.t3Thread))
+            XCTAssertFalse(opener.open(presentation.focusedItem?.openingThread))
             XCTAssertFalse(opener.open(.init(environmentId: "bad/path", threadId: "thread")))
             XCTAssertEqual(opened.count, 2)
         }
@@ -38,9 +39,10 @@ final class T3ThreadTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: directory) }
         let stateURL = directory.appendingPathComponent("state.json")
         let model = ProgressModel(stateURL: stateURL)
-        func request(_ model: ProgressModel, _ method: String, reference: Any? = nil, progress: Int = 10, isChild: Any? = nil) throws -> HTTPResponse {
+        func request(_ model: ProgressModel, _ method: String, reference: Any? = nil, progress: Int = 10, isChild: Any? = nil, openReference: Any? = nil) throws -> HTTPResponse {
             var value: [String: Any] = ["name": "Build", "progress": progress, "etaSeconds": 60]
             value["t3Thread"] = reference
+            value["t3OpenThread"] = openReference
             value["isChild"] = isChild
             let body = try JSONSerialization.data(withJSONObject: value)
             var wire = Data("\(method) /items HTTP/1.1\r\nContent-Type: application/json\r\nContent-Length: \(body.count)\r\n\r\n".utf8)
@@ -48,10 +50,11 @@ final class T3ThreadTests: XCTestCase {
             return model.handle(try XCTUnwrap(HTTPRequest.parse(wire)))
         }
         let reference = ["environmentId": "mac", "threadId": "thread"]
-        XCTAssertEqual(try request(model, "POST", reference: reference, isChild: true).status, 200)
+        XCTAssertEqual(try request(model, "POST", reference: reference, isChild: true, openReference: ["environmentId": "mac", "threadId": "child%3Atask"]).status, 200)
         for bad: Any in ["thread", 42, [:], ["threadId": "thread"], ["environmentId": "mac", "threadId": 42],
                          ["environmentId": "mac", "threadId": "thread?prompt=bad"]] {
             XCTAssertEqual(try request(model, "POST", reference: bad, progress: 99).status, 400)
+            XCTAssertEqual(try request(model, "POST", progress: 99, openReference: bad).status, 400)
         }
         XCTAssertEqual(try request(model, "POST", reference: NSNull(), progress: 20).status, 200)
         XCTAssertEqual(try request(model, "POST", progress: 30).status, 200)
@@ -62,6 +65,7 @@ final class T3ThreadTests: XCTestCase {
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: request(restored, "GET").body) as? [String: Any])
         let item = try XCTUnwrap((json["items"] as? [[String: Any]])?.first)
         XCTAssertEqual(item["t3Thread"] as? [String: String], reference)
+        XCTAssertEqual(item["t3OpenThread"] as? [String: String], ["environmentId": "mac", "threadId": "child%3Atask"])
         XCTAssertEqual(item["progress"] as? Int, 30)
         XCTAssertEqual(item["isChild"] as? Bool, true)
         XCTAssertEqual(try request(restored, "POST", isChild: false).status, 200)

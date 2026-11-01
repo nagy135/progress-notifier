@@ -8,11 +8,12 @@ public struct ProgressUpdate: Codable {
     public let projectIcon: ProjectIcon?
     public let description: String?
     public let t3Thread: T3ThreadReference?
+    public let t3OpenThread: T3ThreadReference?
     public let runId: UUID?
     public let parentRunId: UUID?
     public let isChild: Bool?
 
-    public init(name: String, progress: Double, etaSeconds: Double, project: String? = nil, projectIcon: ProjectIcon? = nil, description: String? = nil, t3Thread: T3ThreadReference? = nil, isChild: Bool? = nil, runId: UUID? = nil, parentRunId: UUID? = nil) {
+    public init(name: String, progress: Double, etaSeconds: Double, project: String? = nil, projectIcon: ProjectIcon? = nil, description: String? = nil, t3Thread: T3ThreadReference? = nil, isChild: Bool? = nil, runId: UUID? = nil, parentRunId: UUID? = nil, t3OpenThread: T3ThreadReference? = nil) {
         self.name = name
         self.progress = progress
         self.etaSeconds = etaSeconds
@@ -20,6 +21,7 @@ public struct ProgressUpdate: Codable {
         self.projectIcon = projectIcon
         self.description = description
         self.t3Thread = t3Thread
+        self.t3OpenThread = t3OpenThread
         self.isChild = isChild
         self.runId = runId
         self.parentRunId = parentRunId
@@ -44,7 +46,8 @@ public struct ProgressUpdate: Codable {
                               project: try Self.metadata(project, field: "project", limit: 160),
                               projectIcon: try projectIcon?.validated(),
                               description: try Self.normalizedDescription(description),
-                              t3Thread: try t3Thread?.validated(), isChild: isChild, runId: runId, parentRunId: parentRunId)
+                              t3Thread: try t3Thread?.validated(), isChild: isChild, runId: runId, parentRunId: parentRunId,
+                              t3OpenThread: try t3OpenThread?.validated())
     }
 
     public static let descriptionLimit = 2_000
@@ -92,6 +95,8 @@ public struct ProgressItem: Codable, Identifiable {
     public var project: String?
     public var projectIcon: ProjectIcon?
     public var t3Thread: T3ThreadReference? = nil
+    public var t3OpenThread: T3ThreadReference? = nil
+    public var openingThread: T3ThreadReference? { t3OpenThread ?? t3Thread }
     public var runId: UUID? = nil
     public var parentRunId: UUID? = nil
     public var creationOrder: UInt64? = nil
@@ -99,7 +104,7 @@ public struct ProgressItem: Codable, Identifiable {
     public var updates: [ProgressEntry] = []
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, createdAt, completedAt, progress, expectedFinish, completing, project, projectIcon, t3Thread, isChild, runId, parentRunId, creationOrder, updates
+        case id, name, createdAt, completedAt, progress, expectedFinish, completing, project, projectIcon, t3Thread, t3OpenThread, isChild, runId, parentRunId, creationOrder, updates
     }
 
 }
@@ -117,6 +122,7 @@ extension ProgressItem {
         project = try values.decodeIfPresent(String.self, forKey: .project)
         projectIcon = try values.decodeIfPresent(ProjectIcon.self, forKey: .projectIcon)
         t3Thread = try values.decodeIfPresent(T3ThreadReference.self, forKey: .t3Thread)
+        t3OpenThread = try values.decodeIfPresent(T3ThreadReference.self, forKey: .t3OpenThread)
         isChild = try values.decodeIfPresent(Bool.self, forKey: .isChild) ?? false
         runId = try values.decodeIfPresent(UUID.self, forKey: .runId)
         parentRunId = try values.decodeIfPresent(UUID.self, forKey: .parentRunId)
@@ -219,6 +225,7 @@ public final class ProgressRegistry {
         restored.projectIcon = value.projectIcon
         // A bad saved destination must not discard the task itself.
         restored.t3Thread = try? item.t3Thread?.validated()
+        restored.t3OpenThread = try? item.t3OpenThread?.validated()
         var ids = Set<UUID>()
         restored.updates = item.updates.compactMap { entry in
             guard entry.progress.isFinite, (0...100).contains(entry.progress),
@@ -285,6 +292,7 @@ public final class ProgressRegistry {
             if let projectIcon = value.projectIcon { items[index].projectIcon = projectIcon }
             if value.project?.isEmpty == true { items[index].projectIcon = nil }
             if let t3Thread = value.t3Thread { items[index].t3Thread = t3Thread }
+            if let target = value.t3OpenThread { items[index].t3OpenThread = target }
             if let isChild = value.isChild { items[index].isChild = isChild }
             if let runId = value.runId { items[index].runId = runId }
             if let parentRunId = value.parentRunId { items[index].parentRunId = parentRunId }
@@ -311,7 +319,7 @@ public final class ProgressRegistry {
         items.append(ProgressItem(id: UUID(), name: value.name, createdAt: now, completedAt: nil, progress: value.progress,
                                   expectedFinish: now.addingTimeInterval(value.etaSeconds), completing: false,
                                   project: value.project.flatMap { $0.isEmpty ? nil : $0 },
-                                  projectIcon: value.projectIcon, t3Thread: value.t3Thread,
+                                  projectIcon: value.projectIcon, t3Thread: value.t3Thread, t3OpenThread: value.t3OpenThread,
                                   runId: value.runId, parentRunId: value.parentRunId, creationOrder: nextCreationOrder,
                                   isChild: value.isChild ?? false))
         nextCreationOrder &+= 1

@@ -118,3 +118,16 @@ class ClientTests(unittest.TestCase):
                      ["Child", "0", "60", "--child", "--run-id", run, "--parent-run-id", run]]:
             with self.assertRaises(SystemExit):
                 self.invoke(args)
+
+    def testSeparateChildOpeningTarget(self):
+        own = "thread:delegated-task:command%3Amcp%3Achild"
+        code, _, err, request = self.invoke(["Child", "10", "60", "--child",
+            "--t3-environment-id", "mac", "--t3-thread-id", "parent", "--t3-open-thread-id", own])
+        self.assertEqual((code, err), (0, ""))
+        self.assertEqual(request.call_args.args[2]["t3Thread"], {"environmentId": "mac", "threadId": "parent"})
+        self.assertEqual(request.call_args.args[2]["t3OpenThread"], {"environmentId": "mac", "threadId": own})
+        for args in [["Child", "10", "60", "--t3-open-thread-id", own],
+                     ["--list", "--t3-open-thread-id", own],
+                     ["Child", "10", "60", "--t3-environment-id", "mac", "--t3-thread-id", "parent", "--t3-open-thread-id", "bad/path"]]:
+            with self.assertRaises(SystemExit):
+                self.invoke(args)

@@ -99,6 +99,9 @@ final class ProgressModel: ObservableObject {
                 value["isChild"] = $0.isChild
                 if let latest = $0.updates.first { value["description"] = latest.description }
                 if let project = $0.project { value["project"] = project }
+                if let target = $0.t3OpenThread {
+                    value["t3OpenThread"] = ["environmentId": target.environmentId, "threadId": target.threadId]
+                }
                 if let thread = $0.t3Thread {
                     value["t3Thread"] = ["environmentId": thread.environmentId, "threadId": thread.threadId]
                 }
@@ -122,7 +125,7 @@ final class ProgressModel: ObservableObject {
                 let update: ProgressUpdate
                 do { update = try JSONDecoder().decode(ProgressUpdate.self, from: request.body).validated() }
                 catch let error as APIError { throw error }
-                catch { throw APIError(400, "Expected JSON: name (string), progress (0–100), etaSeconds (seconds remaining); optional description and project must be strings, projectIcon must be a T3 project icon object, isChild must be a boolean, runId and parentRunId must be UUID strings, and t3Thread must contain environmentId and threadId strings") }
+                catch { throw APIError(400, "Expected JSON: name (string), progress (0–100), etaSeconds (seconds remaining); optional description and project must be strings, projectIcon must be a T3 project icon object, isChild must be a boolean, runId and parentRunId must be UUID strings, and t3Thread/t3OpenThread must contain environmentId and threadId strings") }
                 // Deleted updates acknowledge receipt without saving, publishing, or feedback.
                 guard !registry.isDeleted(update) else { return HTTPResponse(["ok": true]) }
                 let wasCompleting = registry.item(for: update)?.completing ?? false

@@ -15,9 +15,9 @@ public struct T3ThreadReference: Codable, Hashable {
             guard !value.isEmpty, value.count <= 512,
                   value.unicodeScalars.allSatisfy({
                       (65...90).contains($0.value) || (97...122).contains($0.value)
-                          || (48...57).contains($0.value) || $0 == "-" || $0 == "_" || $0 == ":"
+                          || (48...57).contains($0.value) || $0 == "-" || $0 == "_" || $0 == ":" || (field == "threadId" && $0 == "%")
                   }) else {
-                throw APIError(400, "t3Thread.\(field) must contain 1–512 ASCII letters, digits, hyphens, underscores, or colons")
+                throw APIError(400, "t3Thread.\(field) must contain 1–512 ASCII letters, digits, hyphens, underscores, or colons (threadId also permits percent signs)")
             }
         }
         return self

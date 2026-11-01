@@ -107,7 +107,12 @@ Agents get `environmentId` from T3's `t3_environment_read` and `currentThreadId`
 chat and send that thread ID instead; forks keep their own destination. Parents pass
 the resolved destination and project metadata in delegate briefs so children can link
 their cards even without T3 tools. Separate task names preserve each delegate's
-progress; a shared destination groups the cards and supplies the Enter shortcut.
+progress; a shared destination groups the cards. Children additionally send
+`--t3-open-thread-id '<ownCurrentThreadId>'` with both grouping flags so Enter
+and double-click open their own thread. The optional API field `t3OpenThread`
+uses the same environmentId/threadId shape as `t3Thread`, persists across updates
+and recall, and overrides navigation only. Older cards fall back to `t3Thread`.
+Thread IDs may include literal percent signs; pass the exact ID without decoding.
 Provider conversation IDs such as `CODEX_THREAD_ID` are different.
 The shared skill supplies this metadata automatically for T3 runs. Existing cards
 can be linked by sending both flags on their next update. No T3 Code changes or
@@ -208,7 +213,8 @@ progress_run_id="$(uuidgen)"
 # A delegate generates its own UUID and receives the parent's UUID in its brief.
 ./scripts/progress-notify 'Review release' 0 120 --child --run-id '<child UUID>' \
   --parent-run-id "$progress_run_id" --description 'Reviewing release' \
-  --t3-environment-id '<environmentId>' --t3-thread-id '<resolvedChatThreadId>'
+  --t3-environment-id '<environmentId>' --t3-thread-id '<resolvedChatThreadId>' \
+  --t3-open-thread-id '<ownCurrentThreadId>'
 ```
 
 C, X, Z and relaunch keep their existing visibility rules; grouping never recalls

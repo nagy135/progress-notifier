@@ -29,7 +29,7 @@ final class T3ThreadTests: XCTestCase {
     func testReplacingDestinationAndRejectingInvalidUpdatesAtomically() throws {
         let registry = ProgressRegistry()
         try registry.update(.init(name: "Build", progress: 10, etaSeconds: 60, t3Thread: reference))
-        for invalid in ["", " ", "../other", "env?prompt=hello", "env#fragment", "env%2Fother", "bad\n", "é", String(repeating: "a", count: 513)] {
+        for invalid in ["", " ", "../other", "env?prompt=hello", "env#fragment", "bad\n", "é", String(repeating: "a", count: 513)] {
             for candidate in [T3ThreadReference(environmentId: invalid, threadId: "thread"),
                               T3ThreadReference(environmentId: "env", threadId: invalid)] {
                 XCTAssertNil(candidate.url)
@@ -60,6 +60,31 @@ final class T3ThreadTests: XCTestCase {
         let restored = ProgressRegistry(snapshot: snapshot)
         XCTAssertEqual(restored.items.count, 1)
         XCTAssertNil(restored.items.first?.t3Thread)
+    }
+
+    func testChildOpeningTargetPreservesGroupingAndSurvivesHistory() throws {
+        let registry = ProgressRegistry()
+        let parent = UUID(), child = UUID()
+        let own = T3ThreadReference(environmentId: "mac", threadId: "thread:delegated-task:command%3Amcp%3Atask")
+        try registry.update(.init(name: "Parent", progress: 0, etaSeconds: 60, t3Thread: reference, runId: parent))
+        try registry.update(.init(name: "Child", progress: 10, etaSeconds: 60, t3Thread: reference,
+                                  isChild: true, runId: child, parentRunId: parent, t3OpenThread: own))
+        XCTAssertEqual(ChatTimeline.entries(visible: registry.items).map(\.depth), [0, 1])
+        XCTAssertEqual(registry.items[0].openingThread, reference)
+        XCTAssertEqual(registry.items[1].openingThread, own)
+        XCTAssertEqual(own.url?.absoluteString, "t3code://threads/mac/thread%3Adelegated-task%3Acommand%253Amcp%253Atask")
+        XCTAssertThrowsError(try registry.update(.init(name: "Child", progress: 99, etaSeconds: 0,
+                                                       t3OpenThread: .init(environmentId: "mac", threadId: "bad/path"))))
+        XCTAssertEqual(registry.items[1].progress, 10)
+        let restored = try reload(registry)
+        try restored.update(.init(name: "Child", progress: 100, etaSeconds: 0))
+        restored.clearCompleted()
+        let completed = try reload(restored)
+        XCTAssertTrue(completed.revealNextCompleted())
+        XCTAssertEqual(completed.revealedHistory.first?.openingThread, own)
+        XCTAssertEqual(completed.revealedHistory.first?.t3Thread, reference)
+        try completed.update(.init(name: "Child", progress: 5, etaSeconds: 60))
+        XCTAssertNil(completed.items.last?.t3OpenThread)
     }
 
     private func reload(_ registry: ProgressRegistry) throws -> ProgressRegistry {

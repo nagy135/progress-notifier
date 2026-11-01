@@ -44,10 +44,11 @@ try:
     assert call("/health")["app"] == "progress-notifier"
     icon = {"kind": "lucide", "name": "snowflake", "color": "blue"}
     thread = {"environmentId": "smoke-environment", "threadId": "smoke-thread"}
+    child_thread = {"environmentId": "smoke-environment", "threadId": "thread:delegated-task:command%3Amcp%3Asmoke"}
     parent_run, child_run = str(uuid.uuid4()), str(uuid.uuid4())
     update(names[0], 0, 120, project="progress-notifier", description="Prepared build inputs", t3Thread=thread, runId=parent_run)
     update(names[1], 10, 90, project="nix-darwin", projectIcon=icon, t3Thread=thread,
-           isChild=True, runId=child_run, parentRunId=parent_run)
+           isChild=True, runId=child_run, parentRunId=parent_run, t3OpenThread=child_thread)
     assert len(items()) == 2
     with ThreadPoolExecutor(max_workers=2) as pool:
         list(pool.map(lambda name: update(name, 42, 60), names))
@@ -59,6 +60,7 @@ try:
     assert items()[1]["runId"].lower() == child_run
     assert items()[1]["parentRunId"].lower() == parent_run
     assert items()[1]["isChild"] is True
+    assert items()[1]["t3OpenThread"] == child_thread
     assert "id" in items()[0] and "createdAt" in items()[0]
     update(names[0], 42, 60, description="Compiled the app")
     first = next(item for item in items() if item["name"] == names[0])

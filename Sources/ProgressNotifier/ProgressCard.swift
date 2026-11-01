@@ -57,6 +57,10 @@ private struct ProgressPalette {
         colorScheme == .light ? Color(red: 0.04, green: 0.43, blue: 0.37) : .mint
     }
 
+    var warning: Color {
+        colorScheme == .light ? Color(red: 0.52, green: 0.31, blue: 0) : Color(red: 0.96, green: 0.75, blue: 0.42)
+    }
+
     func progress(completing: Bool, isChild: Bool = false) -> Color {
         if isChild && !completing { return .purple }
         if colorScheme == .light {
@@ -66,19 +70,43 @@ private struct ProgressPalette {
     }
 }
 
-private struct ItemProgressBar: View {
+/// Static hatching stays recognizable at compact sizes and with Reduce Motion.
+struct WarningStripes: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        for x in stride(from: rect.minX - rect.height, through: rect.maxX, by: 6) {
+            path.move(to: CGPoint(x: x, y: rect.maxY))
+            path.addLine(to: CGPoint(x: x + rect.height, y: rect.minY))
+        }
+        return path
+    }
+}
+
+struct ItemProgressBar: View {
     let item: ProgressItem
     var height: CGFloat = 5
 
     @Environment(\.colorScheme) private var colorScheme
     private var palette: ProgressPalette { ProgressPalette(colorScheme: colorScheme) }
-    private var tint: Color { palette.progress(completing: item.completing, isChild: item.isChild) }
+    private var tint: Color { item.warning == nil ? palette.progress(completing: item.completing, isChild: item.isChild) : palette.warning }
 
     var body: some View {
         GeometryReader { proxy in
             Capsule().fill(colorScheme == .light ? Color.black.opacity(0.12) : tint.opacity(0.13))
+                .overlay {
+                    if item.warning != nil {
+                        WarningStripes().stroke(tint.opacity(0.3), lineWidth: 2).clipShape(Capsule())
+                    }
+                }
                 .overlay(alignment: .leading) {
-                    Capsule().fill(tint).frame(width: proxy.size.width * item.progress / 100)
+                    Capsule().fill(tint)
+                        .overlay {
+                            if item.warning != nil {
+                                WarningStripes().stroke(Color.black.opacity(colorScheme == .light ? 0.35 : 0.5), lineWidth: 2)
+                                    .clipShape(Capsule())
+                            }
+                        }
+                        .frame(width: proxy.size.width * item.progress / 100)
                 }
                 .overlay {
                     Capsule().strokeBorder(Color.black.opacity(colorScheme == .light ? 0.16 : 0), lineWidth: 0.5)
@@ -87,7 +115,9 @@ private struct ItemProgressBar: View {
         .frame(height: height)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(item.name)
-        .accessibilityValue(item.completing ? "Complete" : "\(Int(item.progress.rounded())) percent")
+        .help(item.warning.map { "Warning: \($0)" } ?? item.name)
+        .accessibilityValue((item.completing ? "Complete" : "\(Int(item.progress.rounded())) percent")
+                            + (item.warning.map { "; Warning: \($0)" } ?? ""))
     }
 }
 
@@ -206,6 +236,11 @@ private struct SnapshotRow: View {
                 Text(entry.description).font(.system(size: 10.5))
                     .foregroundStyle(latest ? Color.primary : Color.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                if let warning = entry.warning {
+                    Label(warning, systemImage: "exclamationmark.triangle.fill")
+                        .font(.system(size: 10)).foregroundStyle(palette.warning)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 if showMeter { SnapshotMeter(progress: entry.progress, current: latest) }
             }
         }
@@ -277,6 +312,13 @@ private struct ItemCard: View {
                     Text("Current progress · last note at \(latest.progress, specifier: "%.0f")%")
                         .font(.system(size: 9)).foregroundStyle(.secondary).padding(.top, 5)
                 }
+            }
+            if let warning = item.warning {
+                Label(warning, systemImage: "exclamationmark.triangle.fill")
+                    .font(.system(size: 10)).foregroundStyle(palette.warning)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 4)
+                    .accessibilityLabel("Warning: \(warning)")
             }
         }
         // Measure at the final text width, and center completion over the whole card.

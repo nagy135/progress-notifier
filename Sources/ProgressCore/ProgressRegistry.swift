@@ -7,18 +7,20 @@ public struct ProgressUpdate: Codable {
     public let project: String?
     public let projectIcon: ProjectIcon?
     public let description: String?
+    public let warning: String?
     public let t3Thread: T3ThreadReference?
     public let t3OpenThread: T3ThreadReference?
     public let runId: UUID?
     public let parentRunId: UUID?
     public let isChild: Bool?
 
-    public init(name: String, progress: Double, etaSeconds: Double, project: String? = nil, projectIcon: ProjectIcon? = nil, description: String? = nil, t3Thread: T3ThreadReference? = nil, isChild: Bool? = nil, runId: UUID? = nil, parentRunId: UUID? = nil, t3OpenThread: T3ThreadReference? = nil) {
+    public init(name: String, progress: Double, etaSeconds: Double, project: String? = nil, projectIcon: ProjectIcon? = nil, description: String? = nil, t3Thread: T3ThreadReference? = nil, isChild: Bool? = nil, runId: UUID? = nil, parentRunId: UUID? = nil, t3OpenThread: T3ThreadReference? = nil, warning: String? = nil) {
         self.name = name
         self.progress = progress
         self.etaSeconds = etaSeconds
         self.project = project
         self.projectIcon = projectIcon
+        self.warning = warning
         self.description = description
         self.t3Thread = t3Thread
         self.t3OpenThread = t3OpenThread
@@ -47,7 +49,15 @@ public struct ProgressUpdate: Codable {
                               projectIcon: try projectIcon?.validated(),
                               description: try Self.normalizedDescription(description),
                               t3Thread: try t3Thread?.validated(), isChild: isChild, runId: runId, parentRunId: parentRunId,
-                              t3OpenThread: try t3OpenThread?.validated())
+                              t3OpenThread: try t3OpenThread?.validated(),
+                              warning: try Self.normalizedWarning(warning))
+    }
+
+    /// nil preserves the current warning; an empty string explicitly clears it.
+    public static func normalizedWarning(_ input: String?) throws -> String? {
+        guard let input else { return nil }
+        do { return try normalizedDescription(input) ?? "" }
+        catch { throw APIError(400, "warning must contain at most 2000 characters; only newline and tab control characters are supported") }
     }
 
     public static let descriptionLimit = 2_000
@@ -81,6 +91,7 @@ public struct ProgressEntry: Codable, Identifiable {
     public let description: String
     public let progress: Double
     public let recordedAt: Date
+    public var warning: String? = nil
 }
 
 public struct ProgressItem: Codable, Identifiable {
@@ -101,10 +112,11 @@ public struct ProgressItem: Codable, Identifiable {
     public var parentRunId: UUID? = nil
     public var creationOrder: UInt64? = nil
     public var isChild: Bool = false
+    public var warning: String? = nil
     public var updates: [ProgressEntry] = []
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, createdAt, completedAt, progress, expectedFinish, completing, project, projectIcon, t3Thread, t3OpenThread, isChild, runId, parentRunId, creationOrder, updates
+        case id, name, createdAt, completedAt, progress, expectedFinish, completing, project, projectIcon, t3Thread, t3OpenThread, isChild, runId, parentRunId, creationOrder, updates, warning
     }
 
 }
@@ -127,6 +139,7 @@ extension ProgressItem {
         runId = try values.decodeIfPresent(UUID.self, forKey: .runId)
         parentRunId = try values.decodeIfPresent(UUID.self, forKey: .parentRunId)
         creationOrder = try values.decodeIfPresent(UInt64.self, forKey: .creationOrder)
+        warning = try values.decodeIfPresent(String.self, forKey: .warning)
         updates = try values.decodeIfPresent([ProgressEntry].self, forKey: .updates) ?? []
     }
 }
@@ -226,13 +239,15 @@ public final class ProgressRegistry {
         // A bad saved destination must not discard the task itself.
         restored.t3Thread = try? item.t3Thread?.validated()
         restored.t3OpenThread = try? item.t3OpenThread?.validated()
+        restored.warning = (try? ProgressUpdate.normalizedDescription(item.warning)) ?? nil
         var ids = Set<UUID>()
         restored.updates = item.updates.compactMap { entry in
             guard entry.progress.isFinite, (0...100).contains(entry.progress),
                   entry.recordedAt.timeIntervalSince1970.isFinite,
                   let text = try? ProgressUpdate.normalizedDescription(entry.description),
                   ids.insert(entry.id).inserted else { return nil }
-            return ProgressEntry(id: entry.id, description: text, progress: entry.progress, recordedAt: entry.recordedAt)
+            return ProgressEntry(id: entry.id, description: text, progress: entry.progress, recordedAt: entry.recordedAt,
+                                 warning: (try? ProgressUpdate.normalizedDescription(entry.warning)) ?? nil)
         }.prefix(updateLimit).map { $0 }
         return restored
     }
@@ -296,7 +311,10 @@ public final class ProgressRegistry {
             if let isChild = value.isChild { items[index].isChild = isChild }
             if let runId = value.runId { items[index].runId = runId }
             if let parentRunId = value.parentRunId { items[index].parentRunId = parentRunId }
-            Self.record(value.description, progress: value.progress, on: &items[index], now: now)
+            let previousWarning = items[index].warning
+            if let warning = value.warning { items[index].warning = warning.isEmpty ? nil : warning }
+            Self.record(value.description, progress: value.progress, on: &items[index], now: now,
+                        warningChanged: previousWarning != items[index].warning)
             if items[index].completing {
                 items[index].completedAt = now
                 history.insert(items[index], at: 0)
@@ -321,9 +339,9 @@ public final class ProgressRegistry {
                                   project: value.project.flatMap { $0.isEmpty ? nil : $0 },
                                   projectIcon: value.projectIcon, t3Thread: value.t3Thread, t3OpenThread: value.t3OpenThread,
                                   runId: value.runId, parentRunId: value.parentRunId, creationOrder: nextCreationOrder,
-                                  isChild: value.isChild ?? false))
+                                  isChild: value.isChild ?? false, warning: value.warning.flatMap { $0.isEmpty ? nil : $0 }))
         nextCreationOrder &+= 1
-        Self.record(value.description, progress: value.progress, on: &items[items.count - 1], now: now)
+        Self.record(value.description, progress: value.progress, on: &items[items.count - 1], now: now, warningChanged: items.last?.warning != nil)
         return false
     }
 
@@ -364,11 +382,12 @@ public final class ProgressRegistry {
         }
     }
 
-    private static func record(_ description: String?, progress: Double, on item: inout ProgressItem, now: Date) {
-        guard let description else { return }
-        if let latest = item.updates.first, latest.description == description, latest.progress == progress { return }
+    private static func record(_ description: String?, progress: Double, on item: inout ProgressItem, now: Date, warningChanged: Bool = false) {
+        guard let description = description ?? (warningChanged ? (item.warning == nil ? "Warning cleared" : "Warning raised") : nil) else { return }
+        if let latest = item.updates.first, latest.description == description, latest.progress == progress,
+           latest.warning == item.warning { return }
         // Receipt order is authoritative, including equal timestamps and regressing percentages.
-        item.updates.insert(ProgressEntry(id: UUID(), description: description, progress: progress, recordedAt: now), at: 0)
+        item.updates.insert(ProgressEntry(id: UUID(), description: description, progress: progress, recordedAt: now, warning: item.warning), at: 0)
         item.updates = Array(item.updates.prefix(updateLimit))
     }
 

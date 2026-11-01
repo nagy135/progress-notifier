@@ -222,6 +222,22 @@ hidden results. H reveals the newest hidden completion and inserts it into its
 chat's chronological position. Keyboard selection follows the rendered order and
 survives progress updates. Closing or deleting a parent does not hide its children.
 
+## Warnings
+
+Add `--warning 'Upload rate-limited; retrying in 30s'` to a normal progress update.
+The affected task shows a static amber striped bar in all three modes, including
+minimized mode, and its message in expanded view and the bar tooltip. Progress and
+ETA continue normally. Omitted warnings are preserved; `--clear-warning` explicitly
+clears one. Warnings and their ledger snapshots survive relaunch and history recall.
+Completion preserves unresolved warnings; a new run starts without one.
+
+Warnings may include a user question, but supplement the normal question in chat
+and the work the agent would otherwise do. They do not create a new reason to wait
+or replace regular progress descriptions. See the skill for examples and guidance.
+The API accepts optional `warning`: a string up to 2,000 characters to set, `""` to
+clear, or omission/null to preserve. `GET /items` includes it when present, including
+on recorded warning snapshots in `updates`.
+
 ## Agent skill
 
 The self-contained skill is in [`skills/progress-notifier`](skills/progress-notifier). Copy that directory into your agent's skills directory. Viktor's shared installation lives in `~/.dots/agents/.agents/skills/progress-notifier` (also exposed at `~/.agents/skills/progress-notifier`). It includes a client and instructions for task naming, ETA updates, successful completion, and cancellation.

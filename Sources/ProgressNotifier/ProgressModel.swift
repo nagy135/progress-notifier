@@ -88,8 +88,10 @@ final class ProgressModel: ObservableObject {
                 var value: [String: Any] = ["name": $0.name, "progress": $0.progress,
                     "etaSeconds": max(0, $0.expectedFinish.timeIntervalSinceNow), "completing": $0.completing]
                 value["updates"] = $0.updates.map { entry -> [String: Any] in
-                    ["id": entry.id.uuidString, "description": entry.description,
+                    var note: [String: Any] = ["id": entry.id.uuidString, "description": entry.description,
                      "progress": entry.progress, "recordedAt": timestamp.string(from: entry.recordedAt)]
+                    if let warning = entry.warning { note["warning"] = warning }
+                    return note
                 }
                 value["updateCount"] = $0.updates.count
                 value["id"] = $0.id.uuidString
@@ -97,6 +99,7 @@ final class ProgressModel: ObservableObject {
                 if let run = $0.runId { value["runId"] = run.uuidString }
                 if let parent = $0.parentRunId { value["parentRunId"] = parent.uuidString }
                 value["isChild"] = $0.isChild
+                if let warning = $0.warning { value["warning"] = warning }
                 if let latest = $0.updates.first { value["description"] = latest.description }
                 if let project = $0.project { value["project"] = project }
                 if let target = $0.t3OpenThread {
@@ -125,7 +128,7 @@ final class ProgressModel: ObservableObject {
                 let update: ProgressUpdate
                 do { update = try JSONDecoder().decode(ProgressUpdate.self, from: request.body).validated() }
                 catch let error as APIError { throw error }
-                catch { throw APIError(400, "Expected JSON: name (string), progress (0–100), etaSeconds (seconds remaining); optional description and project must be strings, projectIcon must be a T3 project icon object, isChild must be a boolean, runId and parentRunId must be UUID strings, and t3Thread/t3OpenThread must contain environmentId and threadId strings") }
+                catch { throw APIError(400, "Expected JSON: name (string), progress (0–100), etaSeconds (seconds remaining); optional warning, description and project must be strings, projectIcon must be a T3 project icon object, isChild must be a boolean, runId and parentRunId must be UUID strings, and t3Thread/t3OpenThread must contain environmentId and threadId strings") }
                 // Deleted updates acknowledge receipt without saving, publishing, or feedback.
                 guard !registry.isDeleted(update) else { return HTTPResponse(["ok": true]) }
                 let wasCompleting = registry.item(for: update)?.completing ?? false

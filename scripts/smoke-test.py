@@ -75,10 +75,18 @@ try:
     update(names[1], 42, 45)  # ETA-only updates keep the icon and trigger a new pulse.
     assert items()[1]["projectIcon"] == icon
 
+    update(names[0], 42, 60, warning="Upload rate-limited; retrying")
+    update(names[0], 45, 50)
+    assert items()[0]["warning"] == "Upload rate-limited; retrying"
+    assert "warning" not in items()[1]
+    update(names[0], 48, 45, warning="", description="Upload resumed")
+    assert "warning" not in items()[0]
+    assert any(entry.get("warning") == "Upload rate-limited; retrying" for entry in items()[0]["updates"])
+
     call("/items", "POST", b'{"name":"bad","progress":101,"etaSeconds":0}',
          {"Content-Type": "application/json"}, status=400)
     call("/items", "POST", b'{}', {"Content-Type": "application/json"}, status=400)
-    for metadata in [{"runId": "invalid"}, {"parentRunId": 42}, {"description": 42}, {"description": "x" * 2001}, {"description": "bad\x00text"}, {"project": 42}, {"projectIcon": "snowflake"},
+    for metadata in [{"warning": 42}, {"warning": "x" * 2001}, {"warning": "bad\x00"}, {"runId": "invalid"}, {"parentRunId": 42}, {"description": 42}, {"description": "x" * 2001}, {"description": "bad\x00text"}, {"project": 42}, {"projectIcon": "snowflake"},
                      {"projectIcon": {"kind": "lucide", "name": "../file", "color": "blue"}},
                      {"projectIcon": {"kind": "emoji", "emoji": ""}},
                      {"t3Thread": {"environmentId": "smoke-environment"}},

@@ -22,6 +22,22 @@ class ClientTests(unittest.TestCase):
                 code = client.main()
         return code, output.getvalue(), errors.getvalue(), request
 
+    def testWarningAndExplicitClearPayloads(self):
+        for flags, expected in [(["--warning", "  Question?\r\nContinuing. "], "Question?\nContinuing."),
+                                (["--clear-warning"], "")]:
+            code, _, err, request = self.invoke(["Build", "40", "90", *flags, "--description", "Testing"], result={"ok": True})
+            self.assertEqual((code, err), (0, ""))
+            self.assertEqual(request.call_args.args[2]["warning"], expected)
+            self.assertEqual(request.call_args.args[2]["description"], "Testing")
+
+    def testInvalidWarningsAndCommandCombinationsAreRejected(self):
+        for args in [["Build", "40", "90", "--warning", value] for value in ["", "  ", "x" * 2001, "bad\x00"]] + [
+                ["--list", "--warning", "Question?"], ["--health", "--clear-warning"],
+                ["Build", "40", "90", "--warning", "Question?", "--clear-warning"]]:
+            with self.assertRaises(SystemExit) as error:
+                self.invoke(args)
+            self.assertEqual(error.exception.code, 2)
+
     def testStoppedAppIsSilentAndDoesNotRetry(self):
         code, out, err, request = self.invoke(["Build", "40", "90"], error=urllib.error.URLError(ConnectionRefusedError()))
         self.assertEqual((code, out, err), (0, "", ""))

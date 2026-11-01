@@ -312,6 +312,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let hosting = ProgressHostingView(rootView: PanelContent(placement: placement) { root })
             hosting.sizingOptions = []
             panel.contentView = hosting
+            presentation.animationView = hosting
         }
         presentation.update(items: model.displayItems, compact: compact, animated: panel.isVisible, timeline: model.timelineEntries, showTitles: compactTitles)
         resizePanel(reposition: reposition)
@@ -324,7 +325,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let frame = placement.frame(resizing: panel.frame,
                                     to: NSSize(width: presentation.windowWidth, height: presentation.windowHeight),
                                     in: screen.visibleFrame, reposition: !panel.isVisible || reposition)
-        panel.setFrame(frame, display: true)
+        // Lay out the new SwiftUI geometry before AppKit's display pass. Drawing
+        // synchronously here renders stale content and adds work to every frame.
+        panel.setFrame(frame, display: false)
         panel.contentView?.layoutSubtreeIfNeeded()
     }
 

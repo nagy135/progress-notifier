@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import ProgressCore
+import QuartzCore
 
 enum ThreadGroupSymbol: String, CaseIterable {
     case circle, triangle, square, diamond
@@ -38,7 +39,8 @@ final class ProgressPresentation: ObservableObject {
     private var targetExpansion: CGFloat
     private var measuredHeights: [UUID: CGFloat] = [:]
     private var measuredHistoryHeights: [UUID: CGFloat] = [:]
-    private var timer: Timer?
+    weak var animationView: NSView?
+    private let clock = PresentationClock()
     private var updatesFollowFocus = false
 
     init(compact: Bool, showTitles: Bool = false) {
@@ -48,8 +50,6 @@ final class ProgressPresentation: ObservableObject {
         expansion = compact ? 0 : 1
         targetExpansion = compact ? 0 : 1
     }
-
-    deinit { timer?.invalidate() }
 
     // The empty compact card only needs room for its status icon and close button.
     var cardWidth: CGFloat { 200 + 170 * expansion + 80 * titlePresence * (1 - emptyPresence) - 128 * emptyPresence * (1 - expansion) }
@@ -204,8 +204,7 @@ final class ProgressPresentation: ObservableObject {
     }
 
     private func animate(animated: Bool) {
-        timer?.invalidate()
-        timer = nil
+        clock.stop()
         let desiredIDs = Set(desiredItems.map(\.id))
         // Invisible rows can take their measured height immediately. Interpolating both
         // height and presence would briefly bulge the window during the empty-state crossfade.
@@ -262,17 +261,11 @@ final class ProgressPresentation: ObservableObject {
             || zip(startRows, targetRows).contains { abs($0.presence - $1.presence) > 0.001
                 || abs($0.detailsHeight - $1.detailsHeight) > 0.5 || abs($0.historyHeight - $1.historyHeight) > 0.5 }
         guard needsAnimation else { apply(1); return }
-        let startedAt = ProcessInfo.processInfo.systemUptime
-        let timer = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] timer in
-            guard let self else { timer.invalidate(); return }
-            let fraction = min(1, (ProcessInfo.processInfo.systemUptime - startedAt) / Self.transitionDuration)
+        let startedAt = CACurrentMediaTime()
+        clock.start(view: animationView) { timestamp in
+            let fraction = min(1, max(0, (timestamp - startedAt) / Self.transitionDuration))
             apply(CGFloat(fraction * fraction * (3 - 2 * fraction)))
-            if fraction >= 1 {
-                timer.invalidate()
-                self.timer = nil
-            }
+            return fraction < 1
         }
-        self.timer = timer
-        RunLoop.main.add(timer, forMode: .common)
     }
 }

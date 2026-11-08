@@ -2,6 +2,17 @@ import AppKit
 import SwiftUI
 import ProgressCore
 
+/// Static cards get one initial date without keeping a repeating timer alive.
+struct CardTimelineSchedule: TimelineSchedule {
+    var interval: TimeInterval
+    var paused: Bool
+
+    func entries(from startDate: Date, mode: TimelineScheduleMode) -> AnySequence<Date> {
+        if paused { return AnySequence([startDate]) }
+        return AnySequence(PeriodicTimelineSchedule(from: startDate, by: interval).entries(from: startDate, mode: mode))
+    }
+}
+
 private struct ButtonFramesKey: PreferenceKey {
     static var defaultValue: [CGRect] = []
     static func reduce(value: inout [CGRect], nextValue: () -> [CGRect]) { value += nextValue() }
@@ -430,12 +441,16 @@ private struct ItemCard: View {
                     .accessibilityHidden(expansion < 0.5)
             }
             .frame(height: blend(ProgressCard.compactRowHeight, receipt ? 4 : 12, expansion))
-            earlierUpdates
-                .frame(width: 0, height: historyHeight * expansion, alignment: .topLeading)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .opacity(detailOpacity).clipped()
-                .accessibilityElement(children: historyHeight < 0.5 ? .ignore : .contain)
-                .accessibilityHidden(historyHeight < 0.5 || expansion < 0.5)
+            // A zero-height frame still builds and lays out every snapshot. Mount the
+            // ledger on demand, retaining it until a closing animation has finished.
+            if updatesUnfolded || historyHeight > 0 {
+                earlierUpdates
+                    .frame(width: 0, height: historyHeight * expansion, alignment: .topLeading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .opacity(detailOpacity).clipped()
+                    .accessibilityElement(children: historyHeight < 0.5 ? .ignore : .contain)
+                    .accessibilityHidden(historyHeight < 0.5 || expansion < 0.5)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 8 * expansion)
@@ -586,50 +601,48 @@ struct ProgressCard: View {
 
             ScrollViewReader { proxy in
                 ScrollView(.vertical, showsIndicators: presentation.needsScrolling) {
-                    TimelineView(.periodic(from: .now, by: 1)) { context in
-                        VStack(alignment: .leading, spacing: 0) {
-                            ForEach(Array(presentation.rows.enumerated()), id: \.element.id) { index, row in
-                                timelineRow(row, now: context.date)
-                                    .frame(width: blend(presentation.compactRowWidth, Self.expandedRowWidth, expansion), alignment: .leading)
-                                    .fixedSize(horizontal: false, vertical: true)
-                                    .frame(height: presentation.rowHeight(row) * row.presence,
-                                           alignment: .top)
-                                    .opacity(Double(row.presence)).clipped()
-                                    .accessibilityHidden(row.presence < 0.5)
-                                    .contentShape(Rectangle())
-                                    .simultaneousGesture(SpatialTapGesture(count: 2, coordinateSpace: .named("progressCard")).onEnded { value in
-                                        selectItem(row.id, at: value.location, openThread: true)
-                                    })
-                                    .simultaneousGesture(SpatialTapGesture(coordinateSpace: .named("progressCard")).onEnded { value in
-                                        selectItem(row.id, at: value.location, openThread: false)
-                                    })
-                                    .background(GeometryReader { proxy in
-                                        Color.clear.preference(key: ItemFramesKey.self,
-                                            value: row.presence > 0.95 ? [proxy.frame(in: .named("progressCard"))] : [])
-                                    })
-                                    .allowsHitTesting(row.presence > 0.95)
-                                    .padding(.top, presentation.spacing(before: index))
-                                    .overlay(alignment: .topLeading) {
-                                        if row.timeline != nil && row.timeline?.startsGroup == false {
-                                            Rectangle().fill(.secondary.opacity(0.3))
-                                                .frame(width: 1, height: presentation.spacing(before: index))
-                                                .offset(x: 4.5).allowsHitTesting(false).accessibilityHidden(true)
-                                        }
-                                    }
-                                    .id(row.id)
-                            }
-                            emptyState
-                                .frame(height: 20 + 80 * expansion)
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(presentation.rows.enumerated()), id: \.element.id) { index, row in
+                            timelineRow(row)
+                                .frame(width: blend(presentation.compactRowWidth, Self.expandedRowWidth, expansion), alignment: .leading)
                                 .fixedSize(horizontal: false, vertical: true)
-                                .frame(height: (20 + 80 * expansion) * presentation.emptyPresence, alignment: .top)
-                                .opacity(Double(presentation.emptyPresence)).clipped()
-                                .accessibilityHidden(presentation.emptyPresence < 0.5)
+                                .frame(height: presentation.rowHeight(row) * row.presence,
+                                       alignment: .top)
+                                .opacity(Double(row.presence)).clipped()
+                                .accessibilityHidden(row.presence < 0.5)
+                                .contentShape(Rectangle())
+                                .simultaneousGesture(SpatialTapGesture(count: 2, coordinateSpace: .named("progressCard")).onEnded { value in
+                                    selectItem(row.id, at: value.location, openThread: true)
+                                })
+                                .simultaneousGesture(SpatialTapGesture(coordinateSpace: .named("progressCard")).onEnded { value in
+                                    selectItem(row.id, at: value.location, openThread: false)
+                                })
+                                .background(GeometryReader { proxy in
+                                    Color.clear.preference(key: ItemFramesKey.self,
+                                        value: row.presence > 0.95 ? [proxy.frame(in: .named("progressCard"))] : [])
+                                })
+                                .allowsHitTesting(row.presence > 0.95)
+                                .padding(.top, presentation.spacing(before: index))
+                                .overlay(alignment: .topLeading) {
+                                    if row.timeline != nil && row.timeline?.startsGroup == false {
+                                        Rectangle().fill(.secondary.opacity(0.3))
+                                            .frame(width: 1, height: presentation.spacing(before: index))
+                                            .offset(x: 4.5).allowsHitTesting(false).accessibilityHidden(true)
+                                    }
+                                }
+                                .id(row.id)
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.vertical, 4 * expansion * (1 - presentation.emptyPresence))
-                        .padding(.horizontal, 4 * expansion)
-                        .frame(height: presentation.naturalContentHeight, alignment: .top)
+                        emptyState
+                            .frame(height: 20 + 80 * expansion)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(height: (20 + 80 * expansion) * presentation.emptyPresence, alignment: .top)
+                            .opacity(Double(presentation.emptyPresence)).clipped()
+                            .accessibilityHidden(presentation.emptyPresence < 0.5)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 4 * expansion * (1 - presentation.emptyPresence))
+                    .padding(.horizontal, 4 * expansion)
+                    .frame(height: presentation.naturalContentHeight, alignment: .top)
                 }
                 .scrollDisabled(!presentation.needsScrolling)
                 .padding(.trailing, 32 * (1 - expansion))
@@ -714,7 +727,7 @@ struct ProgressCard: View {
         })
     }
 
-    private func timelineRow(_ row: ProgressPresentation.Row, now: Date) -> some View {
+    private func timelineRow(_ row: ProgressPresentation.Row) -> some View {
         let inset = ProgressPresentation.timelineInset(row)
         let width = Self.expandedRowWidth - inset
         return VStack(alignment: .leading, spacing: 0) {
@@ -729,16 +742,12 @@ struct ProgressCard: View {
                 .frame(height: presentation.headerHeight(row), alignment: .top)
                 .opacity(Double(expansion)).clipped().accessibilityHidden(expansion < 0.5)
             }
-            ItemCard(item: row.item, revision: model.revision(for: row.item),
-                     consumeUpdatePulse: { model.consumeUpdatePulse(for: row.item) },
-                     now: now, expansion: expansion,
-                     close: { model.close(row.item) }, detailsHeight: row.detailsHeight,
-                     historyHeight: row.historyHeight,
-                     selected: presentation.focusedItemID == row.id, panelFocused: model.isFocused,
-                     updatesUnfolded: presentation.showsUpdates(for: row.id),
-                     threadGroupSymbol: row.threadGroupSymbol, titlePresence: presentation.titlePresence, receipt: row.receipt,
-                     grouped: row.timeline != nil, detailWidth: width - 16,
-                     parentLabel: row.timeline?.detached == true ? row.timeline?.parentLabel : nil)
+            // Clock invalidations stay inside a card, rather than relaying out the
+            // whole stack every second. Receipts and compact bars have no live text.
+            TimelineView(CardTimelineSchedule(interval: row.item.completing ? 60 : 1,
+                                              paused: expansion == 0 || row.receipt)) { context in
+                itemCard(row, now: context.date, width: width)
+            }
                 .padding(.leading, inset)
                 .overlay(alignment: .topLeading) {
                     if let entry = row.timeline {
@@ -750,6 +759,19 @@ struct ProgressCard: View {
                 }
         }
         .help(row.item.name + (row.timeline?.parentLabel.map { " · Child of " + $0 } ?? ""))
+    }
+
+    private func itemCard(_ row: ProgressPresentation.Row, now: Date, width: CGFloat) -> some View {
+        ItemCard(item: row.item, revision: model.revision(for: row.item),
+                 consumeUpdatePulse: { model.consumeUpdatePulse(for: row.item) },
+                 now: now, expansion: expansion,
+                 close: { model.close(row.item) }, detailsHeight: row.detailsHeight,
+                 historyHeight: row.historyHeight,
+                 selected: presentation.focusedItemID == row.id, panelFocused: model.isFocused,
+                 updatesUnfolded: presentation.showsUpdates(for: row.id),
+                 threadGroupSymbol: row.threadGroupSymbol, titlePresence: presentation.titlePresence, receipt: row.receipt,
+                 grouped: row.timeline != nil, detailWidth: width - 16,
+                 parentLabel: row.timeline?.detached == true ? row.timeline?.parentLabel : nil)
     }
 
     private func selectItem(_ id: UUID, at point: CGPoint, openThread: Bool) {

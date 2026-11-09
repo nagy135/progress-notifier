@@ -422,6 +422,29 @@ private struct ItemCard: View {
                     .opacity(Double(titlePresence)).clipped()
                     .accessibilityHidden(titlePresence < 0.5)
                 ItemProgressBar(item: item, height: blend(5, 3, expansion))
+                    .opacity(item.completing ? Double(expansion) : 1)
+                    .accessibilityHidden(item.completing && expansion < 0.5)
+                    .overlay {
+                        if item.completing {
+                            let statusTint = item.warning == nil ? tint : palette.warning
+                            Text("Done")
+                                .font(.system(size: 9, weight: .medium))
+                                .foregroundStyle(statusTint)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 14)
+                                .background(statusTint.opacity(0.13), in: RoundedRectangle(cornerRadius: 4))
+                                .overlay {
+                                    if item.warning != nil {
+                                        WarningStripes().stroke(statusTint.opacity(0.3), lineWidth: 2)
+                                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                                    }
+                                }
+                                .opacity(Double(1 - expansion))
+                                .accessibilityLabel("\(item.name), completed")
+                                .accessibilityValue(item.warning.map { "Warning: \($0)" } ?? "")
+                                .accessibilityHidden(expansion >= 0.5)
+                        }
+                    }
                 // Reserve the same trailing space on every compact row so selecting
                 // a task never shifts its bar. Inset the dot from the selection
                 // outline as well as from the progress bar.
@@ -458,8 +481,16 @@ private struct ItemCard: View {
         .overlay(alignment: .topLeading) {
             HStack(spacing: blend(4, 3, expansion)) {
                 if receipt {
-                    Image(systemName: "checkmark.circle.fill").font(.system(size: 14)).foregroundStyle(tint)
-                        .frame(width: 18, height: 16).accessibilityLabel("Completed")
+                    ZStack {
+                        ProjectIconView(project: item.project ?? item.name, icon: item.projectIcon, size: blend(16, 13, expansion))
+                            .opacity(Double(1 - expansion))
+                            .accessibilityHidden(expansion >= 0.5)
+                        Image(systemName: "checkmark.circle.fill").font(.system(size: 14)).foregroundStyle(tint)
+                            .opacity(Double(expansion))
+                            .accessibilityLabel("Completed")
+                            .accessibilityHidden(expansion < 0.5)
+                    }
+                    .frame(width: blend(16, 18, expansion), height: 16)
                 } else {
                     ProjectIconView(project: item.project ?? item.name, icon: item.projectIcon, size: blend(16, 13, expansion))
                 }
